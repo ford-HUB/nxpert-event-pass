@@ -1,0 +1,139 @@
+<div class="auth-shell">
+  <mat-card class="auth-card">
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+    <mat-card-header>
+      <mat-card-title>
+        <div class="page-title">
+          <mat-icon color="primary">person_add</mat-icon>
+          <h1>Create account</h1>
+        </div>
+      </mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form #f="ngForm" (ngSubmit)="submit()">
+        <div class="name-row">
+          <mat-form-field appearance="outline" class="nr-first">
+            <mat-label>First name</mat-label>
+            <input matInput name="firstName" [(ngModel)]="firstName" #firstCtrl="ngModel"
+                   required maxlength="100" />
+            @if (firstCtrl.hasError('required')) { <mat-error>Required.</mat-error> }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="nr-mi">
+            <mat-label>M.I.</mat-label>
+            <input matInput name="middleInitial" [(ngModel)]="middleInitial" maxlength="5" />
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Last name</mat-label>
+          <input matInput name="lastName" [(ngModel)]="lastName" #lastCtrl="ngModel"
+                 required maxlength="100" />
+          @if (lastCtrl.hasError('required')) { <mat-error>Last name is required.</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Senate No.</mat-label>
+          <input matInput name="senateNo" [(ngModel)]="senateNo" #senateCtrl="ngModel"
+                 required maxlength="50" />
+          @if (senateCtrl.hasError('required')) { <mat-error>Senate No. is required.</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Level</mat-label>
+          <mat-select name="level" [(ngModel)]="level" #levelCtrl="ngModel" required>
+            @for (opt of levelOptions; track opt) {
+              <mat-option [value]="opt">{{ opt }}</mat-option>
+            }
+          </mat-select>
+          @if (levelCtrl.hasError('required')) { <mat-error>Level is required.</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email</mat-label>
+          <input matInput type="email" name="email" [(ngModel)]="email" #emailCtrl="ngModel"
+                 required email maxlength="256" autocomplete="username" />
+          @if (emailCtrl.hasError('required')) { <mat-error>Email is required.</mat-error> }
+          @if (emailCtrl.hasError('email')) { <mat-error>Enter a valid email address.</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Password</mat-label>
+          <input
+            matInput
+            type="password"
+            name="password"
+            [(ngModel)]="password"
+            #pwdCtrl="ngModel"
+            required
+            minlength="8"
+            maxlength="128"
+            pattern="^(?=.*[A-Za-z])(?=.*\d).+$"
+            autocomplete="new-password"
+          />
+          <mat-hint>At least 8 characters, with a letter and a number.</mat-hint>
+          @if (pwdCtrl.hasError('required')) { <mat-error>Password is required.</mat-error> }
+          @if (pwdCtrl.hasError('minlength')) { <mat-error>Password must be at least 8 characters.</mat-error> }
+          @if (!pwdCtrl.hasError('minlength') && pwdCtrl.hasError('pattern')) {
+            <mat-error>Include at least one letter and one number.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Phone (optional)</mat-label>
+          <input matInput name="phone" [(ngModel)]="phone" #phoneCtrl="ngModel"
+                 pattern="^[0-9+()\-\s]{7,40}$" />
+          @if (phoneCtrl.hasError('pattern')) {
+            <mat-error>Enter a valid phone number (digits, spaces, + ( ) -).</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>JCI Senate Chapter</mat-label>
+          <input matInput name="organization" [(ngModel)]="organization" maxlength="200" />
+        </mat-form-field>
+
+        <div class="photo-row">
+          <div class="photo-preview" [class.has-image]="photo">
+            @if (photo) {
+              <img [src]="photo" alt="Profile photo preview" />
+            } @else {
+              <mat-icon>account_circle</mat-icon>
+            }
+          </div>
+          <div class="photo-actions">
+            <p class="photo-label">Profile photo <span class="muted">(optional)</span></p>
+            <p class="muted photo-hint">Shown on the welcome screen when you check in at the event.</p>
+            <div class="photo-buttons">
+              <button type="button" mat-stroked-button (click)="photoInput.click()">
+                <mat-icon>photo_camera</mat-icon> {{ photo ? 'Change photo' : 'Add photo' }}
+              </button>
+              @if (photo) {
+                <button type="button" mat-button (click)="removePhoto()">Remove</button>
+              }
+            </div>
+            @if (photoError()) { <p class="error-text">{{ photoError() }}</p> }
+          </div>
+          <input #photoInput type="file" accept="image/*" hidden (change)="onPhotoSelected($event)" />
+        </div>
+
+        <button
+          mat-flat-button
+          color="primary"
+          class="full-width"
+          type="submit"
+          [disabled]="loading() || f.invalid"
+        >
+          Create account
+        </button>
+      </form>
+
+      <p class="muted signup-line">
+        Already have an account? <a routerLink="/login">Sign in</a>
+      </p>
+    </mat-card-content>
+  </mat-card>
+</div>

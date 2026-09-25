@@ -1,0 +1,29 @@
+@if (saving()) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+
+<h2 mat-dialog-title>Edit your responses</h2>
+
+<mat-dialog-content>
+  <p class="muted" style="margin-top: 0">
+    {{ eventTitle }}@if (sessionTitle()) { — <strong>{{ sessionTitle() }}</strong> }
+  </p>
+
+  @if (loading()) {
+    <div class="empty-state"><mat-icon>hourglass_top</mat-icon><p>Loading…</p></div>
+  } @else if (fields().length === 0) {
+    <div class="empty-state">
+      <mat-icon>info</mat-icon>
+      <p>This event has no additional questions to edit.</p>
+    </div>
+  } @else {
+    <app-dynamic-fields #dyn [fields]="fields()" [initial]="initial()"></app-dynamic-fields>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Cancel</button>
+  @if (fields().length > 0) {
+    <button mat-flat-button color="primary" (click)="save()" [disabled]="saving() || loading()">
+      Save responses
+    </button>
+  }
+</mat-dialog-actions>

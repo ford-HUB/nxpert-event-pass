@@ -1,0 +1,19 @@
+<div class="auth-shell">
+  <mat-card class="auth-card">
+    <mat-card-content class="verify-body">
+      @if (loading()) {
+        <mat-spinner diameter="44"></mat-spinner>
+        <p class="muted">Verifying your email…</p>
+      } @else {
+        @if (success()) {
+          <mat-icon color="primary" class="verify-icon">check_circle</mat-icon>
+        } @else {
+          <mat-icon color="warn" class="verify-icon">error_outline</mat-icon>
+        }
+        <h2>{{ success() ? 'Email verified' : 'Verification problem' }}</h2>
+        <p class="muted">{{ message() }}</p>
+        <a mat-flat-button color="primary" [routerLink]="homeLink">Continue</a>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

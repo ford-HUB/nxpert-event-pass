@@ -1,0 +1,176 @@
+<div class="page-title">
+  <mat-icon color="primary">dashboard</mat-icon>
+  <h1>Dashboard</h1>
+</div>
+
+@if (loading()) {
+  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+} @else if (summary(); as s) {
+  <div class="metric-grid">
+    <mat-card class="metric-card">
+      <mat-icon class="metric-icon">event</mat-icon>
+      <div class="metric-num">{{ s.totalEvents }}</div>
+      <div class="metric-label">Total events</div>
+    </mat-card>
+    <mat-card class="metric-card">
+      <mat-icon class="metric-icon">upcoming</mat-icon>
+      <div class="metric-num">{{ s.upcomingEvents }}</div>
+      <div class="metric-label">Upcoming</div>
+    </mat-card>
+    <mat-card class="metric-card">
+      <mat-icon class="metric-icon">how_to_reg</mat-icon>
+      <div class="metric-num">{{ s.totalRegistrations }}</div>
+      <div class="metric-label">Registrations</div>
+    </mat-card>
+    <mat-card class="metric-card accent">
+      <mat-icon class="metric-icon">fact_check</mat-icon>
+      <div class="metric-num">{{ s.totalCheckedIn }}</div>
+      <div class="metric-label">Checked in · {{ s.checkInRate }}%</div>
+    </mat-card>
+  </div>
+
+  <div class="toolbar-row section-head">
+    <h2>Recent events</h2>
+    <span class="spacer"></span>
+    <a mat-button routerLink="/admin/events">View all</a>
+  </div>
+
+  @if (s.recentEvents.length === 0) {
+    <div class="empty-state">
+      <mat-icon>event_note</mat-icon>
+      <p>No events yet.</p>
+      <a mat-flat-button color="primary" routerLink="/admin/events/new">Create an event</a>
+    </div>
+  } @else {
+    <div class="card-grid">
+      @for (e of s.recentEvents; track e.id) {
+        <mat-card class="clickable" [routerLink]="['/admin/events', e.id]">
+          <mat-card-header>
+            <mat-card-title>{{ e.title }}</mat-card-title>
+            <mat-card-subtitle>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="attend-line">
+              <span class="muted">{{ e.checkedInCount }} / {{ e.registeredCount }} checked in</span>
+              <span class="muted">{{ pct(e) }}%</span>
+            </div>
+            <mat-progress-bar mode="determinate" [value]="pct(e)"></mat-progress-bar>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  }
+
+  <!-- Registrations by chapter (for a selected event) -->
+  <div class="toolbar-row section-head">
+    <h2>Registrations by chapter</h2>
+    <span class="spacer"></span>
+    @if (events().length > 0) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-picker">
+        <mat-label>Event</mat-label>
+        <mat-select [ngModel]="selectedEventId()" (ngModelChange)="onEventChange($event)"
+                    (openedChange)="onPanelToggle($event)">
+          <div class="select-search">
+            <mat-icon>search</mat-icon>
+            <input type="text" placeholder="Search events"
+                   [ngModel]="eventSearch()" (ngModelChange)="eventSearch.set($event)"
+                   (keydown)="$event.stopPropagation()" />
+          </div>
+          @for (ev of filteredEvents(); track ev.id) {
+            <mat-option [value]="ev.id">{{ ev.title }}</mat-option>
+          } @empty {
+            <div class="select-empty">No events match “{{ eventSearch() }}”.</div>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+  </div>
+
+  @if (events().length === 0) {
+    <div class="empty-state">
+      <mat-icon>event_note</mat-icon>
+      <p>No events yet.</p>
+    </div>
+  } @else if (breakdownLoading()) {
+    <div class="empty-state"><mat-spinner diameter="32"></mat-spinner></div>
+  } @else if (breakdown(); as b) {
+    <mat-card class="chapter-card">
+      <mat-card-header class="collapse-head" (click)="regChartOpen.set(!regChartOpen())"
+                       role="button" tabindex="0"
+                       (keydown.enter)="regChartOpen.set(!regChartOpen())"
+                       (keydown.space)="regChartOpen.set(!regChartOpen()); $event.preventDefault()">
+        <div class="collapse-titles">
+          <mat-card-title>{{ b.eventTitle }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ b.startsAt | date: 'EEE, MMM d y' }} · {{ b.totalRegistrations }} registration{{ b.totalRegistrations === 1 ? '' : 's' }}
+          </mat-card-subtitle>
+        </div>
+        <button mat-icon-button class="collapse-toggle" type="button"
+                [attr.aria-label]="regChartOpen() ? 'Collapse' : 'Expand'"
+                [attr.aria-expanded]="regChartOpen()" (click)="$event.stopPropagation(); regChartOpen.set(!regChartOpen())">
+          <mat-icon>{{ regChartOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+      </mat-card-header>
+      @if (regChartOpen()) {
+      <mat-card-content>
+        @if (b.chapters.length === 0) {
+          <p class="muted">No chapters defined in the user master yet.</p>
+        }
+        @for (c of b.chapters; track c.chapter) {
+          <div class="chapter-row" [class.zero]="c.count === 0">
+            <div class="chapter-line">
+              <span class="chapter-name">{{ c.chapter }}</span>
+              <span class="chapter-pct">{{ c.count }}</span>
+            </div>
+            <div class="chapter-track">
+              <div class="chapter-fill"
+                   [style.width.%]="barWidth(c.count)"
+                   [style.background]="chapterColor(c.chapter)"></div>
+            </div>
+          </div>
+        }
+      </mat-card-content>
+      }
+    </mat-card>
+
+    <!-- Kit claimed by chapter (same selected event) -->
+    <mat-card class="chapter-card kit-card">
+      <mat-card-header class="collapse-head" (click)="kitChartOpen.set(!kitChartOpen())"
+                       role="button" tabindex="0"
+                       (keydown.enter)="kitChartOpen.set(!kitChartOpen())"
+                       (keydown.space)="kitChartOpen.set(!kitChartOpen()); $event.preventDefault()">
+        <div class="collapse-titles">
+          <mat-card-title>Kits claimed by chapter</mat-card-title>
+          <mat-card-subtitle>
+            {{ b.totalKitClaimed }} of {{ b.totalRegistrations }} kit{{ b.totalKitClaimed === 1 ? '' : 's' }} claimed
+          </mat-card-subtitle>
+        </div>
+        <button mat-icon-button class="collapse-toggle" type="button"
+                [attr.aria-label]="kitChartOpen() ? 'Collapse' : 'Expand'"
+                [attr.aria-expanded]="kitChartOpen()" (click)="$event.stopPropagation(); kitChartOpen.set(!kitChartOpen())">
+          <mat-icon>{{ kitChartOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+      </mat-card-header>
+      @if (kitChartOpen()) {
+      <mat-card-content>
+        @if (b.chapters.length === 0) {
+          <p class="muted">No chapters to show yet.</p>
+        }
+        @for (c of claimedChapters(); track c.chapter) {
+          <div class="chapter-row" [class.zero]="c.kitClaimed === 0">
+            <div class="chapter-line">
+              <span class="chapter-name">{{ c.chapter }}</span>
+              <span class="chapter-pct">{{ c.kitClaimed }} / {{ c.count }}</span>
+            </div>
+            <div class="chapter-track">
+              <div class="chapter-fill"
+                   [style.width.%]="barWidthClaimed(c.kitClaimed)"
+                   [style.background]="chapterColor(c.chapter)"></div>
+            </div>
+          </div>
+        }
+      </mat-card-content>
+      }
+    </mat-card>
+  }
+}

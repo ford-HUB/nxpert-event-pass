@@ -1,0 +1,22 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+
+# Backend runtime artifacts
+backend/EventRegistration.Api/outbox/
+
+# Node / Angular
+node_modules/
+frontend/web/dist/
+frontend/web/.angular/
+
+# IDE / OS
+.vs/
+.idea/
+*.suo
+Thumbs.db
+.DS_Store
+
+# Secrets — do not commit real SMTP credentials
+appsettings.*.Local.json

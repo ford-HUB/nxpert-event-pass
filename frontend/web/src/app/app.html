@@ -1,0 +1,143 @@
+@if (auth.isLoggedIn()) {
+  <mat-toolbar class="app-toolbar">
+    <span class="brand" routerLink="/">
+      <span class="brand-badge"><mat-icon>event_available</mat-icon></span>
+      <span class="brand-text">NXPass</span>
+    </span>
+
+    <nav class="nav-links">
+      @if (auth.isAdmin()) {
+        <a mat-button routerLink="/admin/dashboard" routerLinkActive="active-link">
+          <mat-icon>dashboard</mat-icon> <span>Dashboard</span>
+        </a>
+        <a mat-button routerLink="/admin/events" routerLinkActive="active-link">
+          <mat-icon>event</mat-icon> <span>Events</span>
+        </a>
+        <a mat-button routerLink="/admin/users" routerLinkActive="active-link">
+          <mat-icon>manage_accounts</mat-icon> <span>Users</span>
+        </a>
+        <a mat-button routerLink="/admin/settings" routerLinkActive="active-link">
+          <mat-icon>settings</mat-icon> <span>Settings</span>
+        </a>
+      } @else if (auth.isMerchant()) {
+        <!-- Merchant: meal-stub scanning only -->
+        <a mat-button routerLink="/merchant/scan" routerLinkActive="active-link">
+          <mat-icon>restaurant</mat-icon> <span>Meal Scanner</span>
+        </a>
+      } @else if (auth.canConfirm()) {
+        <!-- Non-admin registration confirmer: events access for confirmation only -->
+        <a mat-button routerLink="/admin/events" routerLinkActive="active-link">
+          <mat-icon>how_to_reg</mat-icon> <span>Confirm Registrations</span>
+        </a>
+        <a mat-button routerLink="/events" routerLinkActive="active-link">
+          <mat-icon>event</mat-icon> <span>Browse Events</span>
+        </a>
+        <a mat-button routerLink="/my-events" routerLinkActive="active-link">
+          <mat-icon>confirmation_number</mat-icon> <span>My Events</span>
+        </a>
+      } @else {
+        <a mat-button routerLink="/events" routerLinkActive="active-link">
+          <mat-icon>event</mat-icon> <span>Events</span>
+        </a>
+        <a mat-button routerLink="/my-events" routerLinkActive="active-link">
+          <mat-icon>confirmation_number</mat-icon> <span>My Events</span>
+        </a>
+      }
+    </nav>
+
+    <span class="spacer"></span>
+
+    <!-- Realtime notifications -->
+    <button mat-icon-button [matMenuTriggerFor]="notifMenu" aria-label="Notifications"
+            [matBadge]="rt.unread()" [matBadgeHidden]="rt.unread() === 0"
+            matBadgeColor="warn" matBadgeSize="small">
+      <mat-icon>{{ rt.unread() > 0 ? 'notifications_active' : 'notifications' }}</mat-icon>
+    </button>
+    <mat-menu #notifMenu="matMenu" class="notif-menu">
+      <div class="notif-head" (click)="$event.stopPropagation()">
+        <span class="notif-heading">Notifications</span>
+        <span class="spacer"></span>
+        @if (rt.notifications().length) {
+          <button mat-button (click)="rt.markAllRead(); $event.stopPropagation()"
+                  [disabled]="rt.unread() === 0">Mark all read</button>
+          <button mat-button (click)="rt.clear(); $event.stopPropagation()">Clear</button>
+        }
+      </div>
+      @if (rt.notifications().length === 0) {
+        <div class="notif-empty">
+          <mat-icon>notifications_none</mat-icon>
+          <span>You're all caught up.</span>
+        </div>
+      } @else {
+        @for (n of rt.notifications(); track n.id) {
+          <button mat-menu-item class="notif-item" [class.unread]="!n.read" (click)="openNotif(n)">
+            <mat-icon [class.approved]="n.kind === 'registrationApproved'"
+                      [class.kit]="n.kind === 'kitClaimed'">{{ n.icon }}</mat-icon>
+            <span class="notif-text">
+              <span class="notif-line">{{ n.body }}</span>
+              <span class="notif-time">{{ n.at | date: 'MMM d, h:mm a' }}</span>
+            </span>
+          </button>
+        }
+      }
+    </mat-menu>
+
+    <button mat-button [matMenuTriggerFor]="menu">
+      <mat-icon>account_circle</mat-icon>
+      <span class="user-name">{{ auth.fullName() }}</span>
+    </button>
+    <mat-menu #menu="matMenu">
+      @if (!auth.isMerchant()) {
+        <a mat-menu-item routerLink="/account">
+          <mat-icon>manage_accounts</mat-icon> Edit account
+        </a>
+      }
+      @if (pwa.canInstall()) {
+        <button mat-menu-item (click)="pwa.install()">
+          <mat-icon>install_mobile</mat-icon> Install app
+        </button>
+      }
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon> Sign out
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+}
+
+@if (auth.needsVerification()) {
+  <div class="verify-banner">
+    <mat-icon>mark_email_unread</mat-icon>
+    <span>Please verify your email address. Check your inbox for the confirmation link.</span>
+    <button mat-button (click)="resendVerification()">Resend email</button>
+  </div>
+}
+
+@if (pwa.showBanner()) {
+  <div class="install-banner">
+    <mat-icon class="install-icon">install_mobile</mat-icon>
+    @if (pwa.canInstall()) {
+      <span class="install-text">Install <strong>NXPass</strong> for quick access and offline check-in.</span>
+      <span class="spacer"></span>
+      <button mat-flat-button color="primary" (click)="pwa.install()">Install</button>
+    } @else {
+      <span class="install-text">
+        Install <strong>NXPass</strong>: tap <mat-icon class="inline-share">ios_share</mat-icon>
+        <strong>Share</strong>, then <strong>Add to Home Screen</strong>.
+      </span>
+      <span class="spacer"></span>
+    }
+    <button mat-icon-button (click)="pwa.dismiss()" aria-label="Dismiss">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+}
+
+<main class="app-content">
+  <router-outlet />
+</main>
+
+<footer class="branding-footer">
+  <span class="branding-footer__text">
+    Powered by <strong>@NOW</strong> &mdash; NXPERT OFFICE WORKSPACE
+  </span>
+</footer>

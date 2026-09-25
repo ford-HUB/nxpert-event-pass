@@ -1,0 +1,535 @@
+<div class="page-title">
+  <mat-icon color="primary">{{ isEdit ? 'edit_calendar' : 'add_circle' }}</mat-icon>
+  <h1>{{ isEdit ? 'Edit event' : 'New event' }}</h1>
+</div>
+
+<mat-card class="form-card">
+  <mat-card-content>
+    <form #f="ngForm" (ngSubmit)="save()">
+      <!-- ===== Event banner ===== -->
+      <div class="banner-editor">
+        @if (bannerImage) {
+          <div class="banner-preview">
+            <img [src]="bannerImage" alt="Event banner preview" />
+          </div>
+          <div class="banner-actions">
+            <button mat-stroked-button type="button" (click)="bannerInput.click()">
+              <mat-icon>image</mat-icon> Replace
+            </button>
+            <button mat-button type="button" color="warn" (click)="removeBanner()">
+              <mat-icon>delete</mat-icon> Remove
+            </button>
+          </div>
+        } @else {
+          <button mat-stroked-button type="button" class="banner-upload" (click)="bannerInput.click()">
+            <mat-icon>add_photo_alternate</mat-icon> Upload banner image
+          </button>
+          <span class="muted banner-help">Shown at the top of the registration page. Optional.</span>
+        }
+        @if (bannerError()) {
+          <p class="error-text field-error">{{ bannerError() }}</p>
+        }
+        <input #bannerInput type="file" accept="image/*" hidden (change)="onBannerSelected($event)" />
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Title</mat-label>
+        <input matInput name="title" [(ngModel)]="title" #titleCtrl="ngModel"
+               required minlength="3" maxlength="300" />
+        @if (titleCtrl.hasError('required')) { <mat-error>Title is required.</mat-error> }
+        @if (titleCtrl.hasError('minlength')) { <mat-error>Title must be at least 3 characters.</mat-error> }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput name="description" [(ngModel)]="description" rows="3" maxlength="4000"></textarea>
+      </mat-form-field>
+
+      <div class="two-col">
+        <mat-form-field appearance="outline">
+          <mat-label>Start date</mat-label>
+          <input matInput [matDatepicker]="startPicker" name="startDate" [(ngModel)]="startDate" required />
+          <mat-datepicker-toggle matIconSuffix [for]="startPicker"></mat-datepicker-toggle>
+          <mat-datepicker #startPicker></mat-datepicker>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Start time</mat-label>
+          <input matInput type="time" name="startTime" [(ngModel)]="startTime" required />
+          <mat-icon matSuffix>schedule</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>End date</mat-label>
+          <input matInput [matDatepicker]="endPicker" name="endDate" [(ngModel)]="endDate" required />
+          <mat-datepicker-toggle matIconSuffix [for]="endPicker"></mat-datepicker-toggle>
+          <mat-datepicker #endPicker></mat-datepicker>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>End time</mat-label>
+          <input matInput type="time" name="endTime" [(ngModel)]="endTime" required />
+          <mat-icon matSuffix>schedule</mat-icon>
+        </mat-form-field>
+      </div>
+
+      @if (!endAfterStart) {
+        <p class="error-text field-error">End date/time must be after the start.</p>
+      }
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Venue</mat-label>
+        <input matInput name="venue" [(ngModel)]="venue" #venueCtrl="ngModel" required maxlength="300" />
+        @if (venueCtrl.hasError('required')) { <mat-error>Venue is required.</mat-error> }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>TV welcome message</mat-label>
+        <input matInput name="welcomeMessage" [(ngModel)]="welcomeMessage" maxlength="200"
+               placeholder="e.g. Welcome, distinguished members!" />
+        <mat-hint>Shown on the check-in scanner's TV screen. Leave blank to use “Welcome”.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Registration fees</mat-label>
+        <textarea matInput name="registrationFees" [(ngModel)]="registrationFees" rows="4"
+                  maxlength="4000"
+                  placeholder="e.g. Members: ₱1,500 · Non-members: ₱2,500 · Includes lunch and materials"></textarea>
+        <mat-hint>Free text shown on the registration page. Leave blank if the event is free.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Status</mat-label>
+        <mat-select name="status" [(ngModel)]="status">
+          <mat-option value="Draft">Draft</mat-option>
+          <mat-option value="Published">Published</mat-option>
+          <mat-option value="Closed">Closed</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Max participants</mat-label>
+        <input matInput type="number" min="1" name="capacity" [(ngModel)]="capacity"
+               placeholder="Leave blank for unlimited" />
+        <mat-hint>Leave blank for unlimited capacity.</mat-hint>
+        @if (capacity != null && capacity < 1) {
+          <mat-error>Capacity must be at least 1 (or blank for unlimited).</mat-error>
+        }
+      </mat-form-field>
+      @if (capacity != null && capacity >= 1 && capacity < registeredCount) {
+        <p class="error-text field-error">
+          Capacity can't be below the {{ registeredCount }} already registered.
+        </p>
+      }
+
+      <mat-slide-toggle name="isPublicLinkEnabled" [(ngModel)]="isPublicLinkEnabled">
+        Enable public registration link
+      </mat-slide-toggle>
+      <br/>
+      <br/>
+      <mat-slide-toggle name="notifyOnKitClaim" [(ngModel)]="notifyOnKitClaim">
+        Notify registrants when their kit is claimed
+      </mat-slide-toggle>
+      <p class="muted field-hint">
+        When on, marking a kit claimed sends a message to the registrant's preferred channel
+        (email or Viber). Self-claimed kits get a generic notice; otherwise it names who claimed it.
+      </p>
+
+      <!-- ===== Sub-events (sessions) ===== -->
+      <div class="builder-section">
+        <div class="builder-head">
+          <div>
+            <h3 class="builder-title">Sub-events (days / sessions)</h3>
+            <p class="muted builder-sub">
+              Optional. Add sub-events for a multi-day program; participants register for each
+              separately. Leave empty for a single event.
+            </p>
+          </div>
+          <button mat-stroked-button type="button" (click)="addSession()">
+            <mat-icon>add</mat-icon> Add sub-event
+          </button>
+        </div>
+
+        @for (s of builderSessions; track s; let i = $index) {
+          <div class="session-row">
+            <div class="session-row-head">
+              <span class="session-num">Sub-event {{ i + 1 }}</span>
+              <button mat-icon-button type="button" color="warn" (click)="removeSession(i)"
+                      aria-label="Remove sub-event">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Title</mat-label>
+              <input matInput [name]="'sTitle' + i" [(ngModel)]="s.title" required maxlength="300"
+                     placeholder="e.g. Day 1 — Opening Plenary" />
+            </mat-form-field>
+
+            <div class="two-col">
+              <mat-form-field appearance="outline">
+                <mat-label>Start date</mat-label>
+                <input matInput [matDatepicker]="sStart" [name]="'sStartDate' + i"
+                       [(ngModel)]="s.startDate" required />
+                <mat-datepicker-toggle matIconSuffix [for]="sStart"></mat-datepicker-toggle>
+                <mat-datepicker #sStart></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Start time</mat-label>
+                <input matInput type="time" [name]="'sStartTime' + i" [(ngModel)]="s.startTime" required />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>End date</mat-label>
+                <input matInput [matDatepicker]="sEnd" [name]="'sEndDate' + i"
+                       [(ngModel)]="s.endDate" required />
+                <mat-datepicker-toggle matIconSuffix [for]="sEnd"></mat-datepicker-toggle>
+                <mat-datepicker #sEnd></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>End time</mat-label>
+                <input matInput type="time" [name]="'sEndTime' + i" [(ngModel)]="s.endTime" required />
+              </mat-form-field>
+            </div>
+
+            <div class="two-col">
+              <mat-form-field appearance="outline">
+                <mat-label>Venue (optional)</mat-label>
+                <input matInput [name]="'sVenue' + i" [(ngModel)]="s.venue" maxlength="300"
+                       placeholder="Defaults to the event venue" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Max participants (optional)</mat-label>
+                <input matInput type="number" min="1" [name]="'sCap' + i" [(ngModel)]="s.capacity"
+                       placeholder="Unlimited" />
+              </mat-form-field>
+            </div>
+
+            <div class="session-poster">
+              @if (s.poster) {
+                <img class="session-poster-thumb" [src]="s.poster" alt="Sub-event poster preview" />
+              } @else {
+                <div class="session-poster-thumb placeholder"><mat-icon>image</mat-icon></div>
+              }
+              <div class="session-poster-actions">
+                <span class="muted">Poster / image (optional) — shown to participants.</span>
+                <div>
+                  <button mat-stroked-button type="button" (click)="posterInput.click()">
+                    <mat-icon>add_photo_alternate</mat-icon> {{ s.poster ? 'Change' : 'Upload poster' }}
+                  </button>
+                  @if (s.poster) {
+                    <button mat-button type="button" (click)="removeSessionPoster(s)">Remove</button>
+                  }
+                </div>
+              </div>
+              <input #posterInput type="file" accept="image/*" hidden
+                     (change)="onSessionPosterSelected($event, s)" />
+            </div>
+
+            <!-- Meal stubs for this sub-event -->
+            <div class="meal-block">
+              <div class="meal-head">
+                <span class="meal-title"><mat-icon class="inline-icon">restaurant</mat-icon> Meal stubs</span>
+                <button mat-stroked-button type="button" (click)="addMeal(s)">
+                  <mat-icon>add</mat-icon> Add stub
+                </button>
+              </div>
+              @if (s.meals.length === 0) {
+                <p class="muted meal-empty">No meal stubs. Add stubs with a name, denomination, and quantity per member.</p>
+              } @else {
+                @for (m of s.meals; track m; let mi = $index) {
+                  <div class="meal-row">
+                    <mat-form-field appearance="outline" class="meal-name">
+                      <mat-label>Stub name</mat-label>
+                      <input matInput [name]="'mName' + i + '_' + mi" [(ngModel)]="m.name"
+                             maxlength="100" placeholder="e.g. Lunch" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="meal-denom">
+                      <mat-label>Denomination</mat-label>
+                      <span matTextPrefix>₱&nbsp;</span>
+                      <input matInput type="number" min="0" step="0.01"
+                             [name]="'mDenom' + i + '_' + mi" [(ngModel)]="m.denomination" placeholder="0.00" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="meal-qty">
+                      <mat-label>Qty</mat-label>
+                      <input matInput type="number" min="1" step="1"
+                             [name]="'mQty' + i + '_' + mi" [(ngModel)]="m.quantity" placeholder="1" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="meal-date">
+                      <mat-label>Valid from</mat-label>
+                      <input matInput [matDatepicker]="mvf" [min]="startDate" [max]="endDate"
+                             [name]="'mVF' + i + '_' + mi" [(ngModel)]="m.validFrom" />
+                      <mat-datepicker-toggle matIconSuffix [for]="mvf"></mat-datepicker-toggle>
+                      <mat-datepicker #mvf></mat-datepicker>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="meal-date">
+                      <mat-label>Valid to</mat-label>
+                      <input matInput [matDatepicker]="mvt" [min]="m.validFrom || startDate" [max]="endDate"
+                             [name]="'mVT' + i + '_' + mi" [(ngModel)]="m.validTo" />
+                      <mat-datepicker-toggle matIconSuffix [for]="mvt"></mat-datepicker-toggle>
+                      <mat-datepicker #mvt></mat-datepicker>
+                    </mat-form-field>
+                    <label class="meal-color" title="Stub colour">
+                      <input type="color" [name]="'mColor' + i + '_' + mi" [(ngModel)]="m.color" />
+                    </label>
+                    <button mat-icon-button type="button" color="warn" (click)="removeMeal(s, mi)"
+                            aria-label="Remove stub">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- ===== Meal stubs per day (only for events with no sub-events) ===== -->
+      @if (builderSessions.length === 0) {
+        <div class="builder-section">
+          <div class="builder-head">
+            <div>
+              <h3 class="builder-title">Meal stubs (per day)</h3>
+              <p class="muted builder-sub">
+                Optional. Define meal stubs for each day — each stub has a denomination, a quantity
+                per member, and a colour. (For events with sub-events, define stubs under each sub-event.)
+              </p>
+            </div>
+            <button mat-stroked-button type="button" (click)="addEventDay()">
+              <mat-icon>add</mat-icon> Add day
+            </button>
+          </div>
+
+          @for (day of eventDays; track day) {
+            <div class="meal-day-block">
+              <div class="meal-day-head">
+                <span class="meal-day-title">Day {{ day }}</span>
+                <button mat-stroked-button type="button" (click)="addEventMeal(day)">
+                  <mat-icon>add</mat-icon> Add stub
+                </button>
+                <span class="spacer"></span>
+                <button mat-icon-button type="button" color="warn" (click)="removeEventDay(day)"
+                        aria-label="Remove day">
+                  <mat-icon>delete_sweep</mat-icon>
+                </button>
+              </div>
+              @for (m of stubsForDay(day); track m; let mi = $index) {
+                <div class="meal-row">
+                  <mat-form-field appearance="outline" class="meal-name">
+                    <mat-label>Stub name</mat-label>
+                    <input matInput [name]="'emName' + day + '_' + mi" [(ngModel)]="m.name"
+                           maxlength="100" placeholder="e.g. Lunch" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="meal-denom">
+                    <mat-label>Denomination</mat-label>
+                    <span matTextPrefix>₱&nbsp;</span>
+                    <input matInput type="number" min="0" step="0.01"
+                           [name]="'emDenom' + day + '_' + mi" [(ngModel)]="m.denomination" placeholder="0.00" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="meal-qty">
+                    <mat-label>Qty</mat-label>
+                    <input matInput type="number" min="1" step="1"
+                           [name]="'emQty' + day + '_' + mi" [(ngModel)]="m.quantity" placeholder="1" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="meal-date">
+                    <mat-label>Valid from</mat-label>
+                    <input matInput [matDatepicker]="emvf" [min]="startDate" [max]="endDate"
+                           [name]="'emVF' + day + '_' + mi" [(ngModel)]="m.validFrom" />
+                    <mat-datepicker-toggle matIconSuffix [for]="emvf"></mat-datepicker-toggle>
+                    <mat-datepicker #emvf></mat-datepicker>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="meal-date">
+                    <mat-label>Valid to</mat-label>
+                    <input matInput [matDatepicker]="emvt" [min]="m.validFrom || startDate" [max]="endDate"
+                           [name]="'emVT' + day + '_' + mi" [(ngModel)]="m.validTo" />
+                    <mat-datepicker-toggle matIconSuffix [for]="emvt"></mat-datepicker-toggle>
+                    <mat-datepicker #emvt></mat-datepicker>
+                  </mat-form-field>
+                  <label class="meal-color" title="Stub colour">
+                    <input type="color" [name]="'emColor' + day + '_' + mi" [(ngModel)]="m.color" />
+                  </label>
+                  <button mat-icon-button type="button" color="warn" (click)="removeEventMeal(m)"
+                          aria-label="Remove stub">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ===== Schedule of activities (editable grid) ===== -->
+      <div class="builder-section">
+        <div class="builder-head">
+          <div>
+            <h3 class="builder-title">Schedule of activities</h3>
+            <p class="muted builder-sub">
+              Optional agenda shown on the registration page. Cells are editable — add a row per activity.
+            </p>
+          </div>
+          <button mat-flat-button color="primary" type="button" (click)="addScheduleRow()">
+            <mat-icon>add</mat-icon> ADD
+          </button>
+        </div>
+
+        <div class="fieldgrid-wrap">
+          <table class="fieldgrid">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Time</th>
+                <th>Activity</th>
+                <th class="fg-act">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of scheduleRows; track row; let i = $index) {
+                <tr>
+                  <td>
+                    <input class="cell-input" [name]="'schedDay' + i" [(ngModel)]="row.day"
+                           placeholder="e.g. Day 1" maxlength="60" />
+                  </td>
+                  <td>
+                    <input class="cell-input" [name]="'schedTime' + i" [(ngModel)]="row.time"
+                           placeholder="e.g. 9:00 AM" maxlength="60" />
+                  </td>
+                  <td>
+                    <input class="cell-input" [name]="'schedAct' + i" [(ngModel)]="row.activity"
+                           placeholder="Activity" maxlength="300" />
+                  </td>
+                  <td class="fg-act">
+                    <button mat-icon-button type="button" color="warn"
+                            (click)="removeScheduleRow(i)" aria-label="Remove row">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+              @if (scheduleRows.length === 0) {
+                <tr>
+                  <td colspan="4" class="fg-empty">
+                    No activities yet — click <strong>ADD</strong> to add a row.
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== Custom registration form builder (editable grid) ===== -->
+      <div class="builder-section">
+        <div class="builder-head">
+          <div>
+            <h3 class="builder-title">Registration form</h3>
+            <p class="muted builder-sub">
+              Add custom questions attendees answer when registering. Name, email and phone are
+              always collected. Cells are editable — pick the control type per row.
+            </p>
+          </div>
+          <button mat-flat-button color="primary" type="button" (click)="addField()">
+            <mat-icon>add</mat-icon> ADD
+          </button>
+        </div>
+
+        <datalist id="categoryOptions">
+          @for (c of categoryNames; track c) {
+            <option [value]="c"></option>
+          }
+        </datalist>
+
+        <div class="fieldgrid-wrap">
+          <table class="fieldgrid">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Field Label</th>
+                <th>Type</th>
+                <th>Options (Comma,Separated)</th>
+                <th>Show Only When</th>
+                <th class="fg-req">Required</th>
+                <th class="fg-act">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (fld of builderFields; track fld.key; let i = $index) {
+                <tr>
+                  <td>
+                    <input class="cell-input" [name]="'cat' + i" [(ngModel)]="fld.category"
+                           list="categoryOptions" placeholder="Category" maxlength="60" />
+                  </td>
+                  <td>
+                    <input class="cell-input" [name]="'label' + i" [(ngModel)]="fld.label"
+                           placeholder="Field label" maxlength="120" />
+                  </td>
+                  <td>
+                    <select class="cell-select" [name]="'type' + i" [(ngModel)]="fld.type">
+                      @for (t of fieldTypes; track t.value) {
+                        <option [value]="t.value">{{ t.label }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <input class="cell-input" [name]="'opts' + i" [(ngModel)]="fld.optionsText"
+                           [disabled]="!needsOptions(fld.type)"
+                           [placeholder]="needsOptions(fld.type) ? 'e.g. Air, Sea, Land' : '—'" />
+                  </td>
+                  <td>
+                    @if (controllersBefore(i).length === 0) {
+                      <span class="fg-cond-none">—</span>
+                    } @else {
+                      <div class="fg-cond">
+                        <select class="cell-select" [name]="'swk' + i" [(ngModel)]="fld.showWhenKey"
+                                (ngModelChange)="onShowWhenKeyChange(fld)">
+                          <option value="">Always show</option>
+                          @for (c of controllersBefore(i); track c.key) {
+                            <option [value]="c.key">{{ c.label || '(unnamed)' }}</option>
+                          }
+                        </select>
+                        @if (fld.showWhenKey) {
+                          <select class="cell-select" [name]="'swv' + i" [(ngModel)]="fld.showWhenValue">
+                            <option value="">Select value…</option>
+                            @for (v of controllerValues(fld); track v) {
+                              <option [value]="v">{{ v }}</option>
+                            }
+                          </select>
+                        }
+                      </div>
+                    }
+                  </td>
+                  <td class="fg-req">
+                    <input type="checkbox" class="cell-check" [name]="'req' + i" [(ngModel)]="fld.required" />
+                  </td>
+                  <td class="fg-act">
+                    <button mat-icon-button type="button" color="warn"
+                            (click)="removeField(i)" aria-label="Remove field">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+              @if (builderFields.length === 0) {
+                <tr>
+                  <td colspan="7" class="fg-empty">
+                    No custom fields yet — click <strong>ADD</strong> to add a row.
+                    The standard form (name, email, phone) is always collected.
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <a mat-button routerLink="/admin/events">Cancel</a>
+        <button
+          mat-flat-button
+          color="primary"
+          type="submit"
+          [disabled]="saving() || !isValid"
+        >
+          {{ isEdit ? 'Save changes' : 'Create event' }}
+        </button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>

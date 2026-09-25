@@ -1,0 +1,367 @@
+<div class="page-title">
+  <mat-icon color="primary">qr_code_scanner</mat-icon>
+  <h1>Check-in{{ eventTitle() ? ' — ' + eventTitle() : '' }}</h1>
+  <span class="spacer"></span>
+  <a mat-stroked-button [routerLink]="['/admin/events', eventId]">
+    <mat-icon>arrow_back</mat-icon> Back
+  </a>
+  <button mat-stroked-button (click)="toggleTv()">
+    <mat-icon>{{ tvMode() ? 'fullscreen_exit' : 'tv' }}</mat-icon>
+    {{ tvMode() ? 'Exit TV mode' : 'TV mode' }}
+  </button>
+</div>
+
+<!-- Event banner strip: contained on the brand backdrop so wide, square or tall images all fit
+     without cropping or distortion. -->
+@if (eventBanner()) {
+  <div class="scan-banner">
+    <img [src]="eventBanner()" [alt]="eventTitle() + ' banner'" />
+  </div>
+}
+
+<div class="scanner-layout">
+  <div class="scanner-col">
+    <mat-button-toggle-group class="mode-toggle" [value]="scanAction()"
+        (change)="setAction($event.value)" aria-label="Scan action">
+      <mat-button-toggle value="checkin"><mat-icon>how_to_reg</mat-icon> Check-in</mat-button-toggle>
+      <mat-button-toggle value="meal"><mat-icon>restaurant</mat-icon> Meal stubs</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    @if (scanAction() === 'meal') {
+      <p class="muted meal-mode-note">
+        <mat-icon class="inline-icon">info</mat-icon>
+        Scan a meal stub's QR code to redeem it. Each stub is valid once. Requires a connection.
+      </p>
+    }
+
+    <mat-button-toggle-group class="mode-toggle" [value]="mode()"
+        (change)="setMode($event.value)" aria-label="Scan input source">
+      @if (scanAction() === 'checkin') {
+        <mat-button-toggle value="auto"><mat-icon>auto_awesome</mat-icon> Auto (QR + Face)</mat-button-toggle>
+      }
+      <mat-button-toggle value="camera"><mat-icon>photo_camera</mat-icon> QR camera</mat-button-toggle>
+      <mat-button-toggle value="barcode"><mat-icon>qr_code_scanner</mat-icon> Barcode</mat-button-toggle>
+      @if (scanAction() === 'checkin') {
+        <mat-button-toggle value="face"><mat-icon>face</mat-icon> Face</mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+
+    <!-- Offline / sync status -->
+    <div class="offline-bar" [class.is-offline]="!offline.online()">
+      @if (offline.online()) {
+        <span class="net-chip online"><mat-icon class="inline-icon">wifi</mat-icon> Online</span>
+      } @else {
+        <span class="net-chip offline"><mat-icon class="inline-icon">wifi_off</mat-icon> Offline — check-ins are saved on this device</span>
+      }
+      @if (offline.pending() > 0) {
+        <span class="queue-chip"><mat-icon class="inline-icon">cloud_upload</mat-icon> {{ offline.pending() }} queued</span>
+      }
+      <span class="spacer"></span>
+      @if (syncMsg()) { <span class="muted sync-msg">{{ syncMsg() }}</span> }
+      <button mat-stroked-button (click)="bundleFile.click()"
+              matTooltip="Load an offline bundle file exported from the event page">
+        <mat-icon>upload_file</mat-icon> Import bundle
+      </button>
+      <input #bundleFile type="file" accept="application/json,.json" hidden
+             (change)="importBundle($event)" />
+      @if (offline.online() && offline.pending() > 0) {
+        @if (offline.syncing()) {
+          <button mat-stroked-button disabled><mat-spinner diameter="16"></mat-spinner>&nbsp;Syncing…</button>
+        } @else {
+          <button mat-stroked-button (click)="syncNow()"><mat-icon>sync</mat-icon> Sync now</button>
+        }
+      }
+    </div>
+
+    @if (mode() === 'camera' || mode() === 'auto') {
+      @if (mode() === 'auto') {
+        <p class="muted meal-mode-note">
+          <mat-icon class="inline-icon">auto_awesome</mat-icon>
+          Auto mode: show a QR pass or a registered face — a QR code always takes priority.
+        </p>
+      }
+      <div class="cam-block" [class.tv-pip]="tvMode()">
+        <div id="qr-reader" class="qr-reader"></div>
+        @if (tvMode() && scanning()) {
+          <div class="cam-pip-label">
+            <mat-icon class="inline-icon">{{ mode() === 'auto' ? 'auto_awesome' : 'videocam' }}</mat-icon>
+            {{ mode() === 'auto' ? 'QR + Face' : 'Camera preview' }}
+          </div>
+        }
+      </div>
+
+      @if (cameraError()) {
+        <mat-card class="cam-error">
+          <mat-card-content>
+            <mat-icon color="warn">videocam_off</mat-icon>
+            <p>{{ cameraError() }}</p>
+            <button mat-flat-button color="primary" (click)="start()">Retry camera</button>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <div class="scan-controls">
+        @if (scanning()) {
+          <button mat-stroked-button (click)="stop()"><mat-icon>stop</mat-icon> Stop</button>
+          <span class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Scanning…</span>
+          @if (mode() === 'auto' && faceReady()) {
+            <span class="muted scan-live"><mat-icon class="inline-icon">face</mat-icon> Face on</span>
+          }
+        } @else if (!starting()) {
+          <button mat-flat-button color="primary" (click)="start()"><mat-icon>play_arrow</mat-icon> Start scanning</button>
+        }
+        <span class="spacer"></span>
+        <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+      </div>
+    } @else if (mode() === 'barcode') {
+      <div class="barcode-block">
+        <mat-icon class="barcode-icon">qr_code_scanner</mat-icon>
+        <p class="muted barcode-hint">
+          Scan a pass with your barcode / QR scanner — or type the code and press Enter.
+        </p>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Pass code</mat-label>
+          <input #barcodeInput matInput name="barcode" [(ngModel)]="barcodeValue"
+                 (keyup.enter)="submitBarcode()" (blur)="onBarcodeBlur()"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 placeholder="Waiting for scan…" />
+          <mat-icon matSuffix>keyboard</mat-icon>
+        </mat-form-field>
+        <div class="scan-controls">
+          <span class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Ready for scanner</span>
+          <span class="spacer"></span>
+          <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+        </div>
+      </div>
+    } @else {
+      <!-- Facial recognition -->
+      <div class="cam-block" [class.tv-pip]="tvMode()">
+        <video #faceVideo autoplay playsinline muted class="qr-reader"></video>
+        @if (tvMode() && faceReady()) {
+          <div class="cam-pip-label"><mat-icon class="inline-icon">face</mat-icon> Face preview</div>
+        }
+      </div>
+
+      @if (faceError()) {
+        <mat-card class="cam-error">
+          <mat-card-content>
+            <mat-icon color="warn">no_accounts</mat-icon>
+            <p>{{ faceError() }}</p>
+            <button mat-flat-button color="primary" (click)="setMode('face')">Retry</button>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      <div class="scan-controls">
+        @if (faceLoading()) {
+          <span class="muted scan-live"><mat-spinner diameter="18"></mat-spinner> Loading face models…</span>
+        } @else if (faceReady()) {
+          <span class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Watching for faces…</span>
+        }
+        <span class="spacer"></span>
+        <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+      </div>
+    }
+  </div>
+
+  <!-- Big result banner -->
+  <div class="result-banner" [class]="'banner-' + banner()">
+    @switch (banner()) {
+      @case ('valid') {
+        @if (resultPhoto()) {
+          <img class="banner-photo" [src]="resultPhoto()" alt="Member photo" />
+        } @else {
+          <mat-icon class="banner-icon">check_circle</mat-icon>
+        }
+        <h2>{{ resultWelcome() || eventWelcome() || 'Welcome!' }}</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        @if (resultLevel() || resultSenateNo() || resultOrganization()) {
+          <p class="banner-meta">
+            @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
+            @if (resultSenateNo()) { <span class="meta-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
+          </p>
+        }
+        <p class="banner-sub">{{ resultEvent() }}</p>
+        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+      }
+      @case ('already') {
+        <mat-icon class="banner-icon">error</mat-icon>
+        <h2>Already checked in</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultEvent() }}</p>
+        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+      }
+      @case ('invalid') {
+        <mat-icon class="banner-icon">cancel</mat-icon>
+        <h2>Invalid pass</h2>
+        <p class="banner-sub">This QR code is not recognized.</p>
+      }
+      @case ('unconfirmed') {
+        <mat-icon class="banner-icon">pending</mat-icon>
+        <h2>Not confirmed</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('nomatch') {
+        <mat-icon class="banner-icon">no_accounts</mat-icon>
+        <h2>Face not registered</h2>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('notreg') {
+        <mat-icon class="banner-icon">person_off</mat-icon>
+        <h2>Not registered</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+        @if (resultEvent()) { <p class="banner-sub">{{ resultEvent() }}</p> }
+      }
+      @case ('notstarted') {
+        <mat-icon class="banner-icon">event_upcoming</mat-icon>
+        <h2>Not open yet</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('ended') {
+        <mat-icon class="banner-icon">event_busy</mat-icon>
+        <h2>Event ended</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('error') {
+        <mat-icon class="banner-icon">wifi_off</mat-icon>
+        <h2>Request failed</h2>
+        <p class="banner-sub">Could not reach the server.</p>
+      }
+      @case ('mealvalid') {
+        <mat-icon class="banner-icon">restaurant</mat-icon>
+        <h2>Meal stubs redeemed</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+      }
+      @case ('mealalready') {
+        <mat-icon class="banner-icon">error</mat-icon>
+        <h2>Already redeemed</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('mealnone') {
+        <mat-icon class="banner-icon">no_meals</mat-icon>
+        <h2>No meal stubs</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('mealnotvalid') {
+        <mat-icon class="banner-icon">event_busy</mat-icon>
+        <h2>Not valid today</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @default {
+        <mat-icon class="banner-icon idle-icon">qr_code_2</mat-icon>
+        <h2>Ready to scan</h2>
+        <p class="banner-sub">
+          {{ scanAction() === 'meal' ? "Scan a pass to redeem meal stubs." : "Point the camera at a participant's pass." }}
+        </p>
+      }
+    }
+  </div>
+</div>
+
+<!-- Big-screen (TV) welcome display for the door. Camera keeps scanning underneath. -->
+@if (tvMode()) {
+  <div class="tv-overlay" [class]="'tv-' + banner()">
+    <button mat-icon-button class="tv-exit" (click)="toggleTv()" aria-label="Exit TV mode">
+      <mat-icon>close</mat-icon>
+    </button>
+
+    @switch (banner()) {
+      @case ('valid') {
+        @if (resultPhoto()) {
+          <img class="tv-photo" [src]="resultPhoto()" alt="Member photo" />
+        } @else {
+          <mat-icon class="tv-icon">celebration</mat-icon>
+        }
+        <p class="tv-kicker">{{ resultWelcome() || eventWelcome() || 'Welcome' }}</p>
+        <h1 class="tv-name">{{ resultName() }}</h1>
+        @if (resultLevel() || resultSenateNo() || resultOrganization()) {
+          <div class="tv-meta">
+            @if (resultLevel()) { <span class="tv-chip">{{ resultLevel() }}</span> }
+            @if (resultSenateNo()) { <span class="tv-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultOrganization()) { <span class="tv-chip">{{ resultOrganization() }}</span> }
+          </div>
+        }
+        <p class="tv-event">{{ resultEvent() }}</p>
+        @if (resultSession()) { <p class="tv-event"><strong>{{ resultSession() }}</strong></p> }
+        <p class="tv-status"><mat-icon class="inline-icon">check_circle</mat-icon> Checked in</p>
+      }
+      @case ('already') {
+        @if (resultPhoto()) {
+          <img class="tv-photo" [src]="resultPhoto()" alt="Member photo" />
+        } @else {
+          <mat-icon class="tv-icon">how_to_reg</mat-icon>
+        }
+        <p class="tv-kicker">Welcome back</p>
+        <h1 class="tv-name">{{ resultName() }}</h1>
+        @if (resultLevel() || resultSenateNo() || resultOrganization()) {
+          <div class="tv-meta">
+            @if (resultLevel()) { <span class="tv-chip">{{ resultLevel() }}</span> }
+            @if (resultSenateNo()) { <span class="tv-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultOrganization()) { <span class="tv-chip">{{ resultOrganization() }}</span> }
+          </div>
+        }
+        <p class="tv-event">{{ resultEvent() }}</p>
+        @if (resultSession()) { <p class="tv-event"><strong>{{ resultSession() }}</strong></p> }
+        <p class="tv-status">Already checked in</p>
+      }
+      @case ('unconfirmed') {
+        <mat-icon class="tv-icon">pending</mat-icon>
+        <h1 class="tv-name">{{ resultName() }}</h1>
+        <p class="tv-status">Registration not yet confirmed</p>
+        <p class="tv-event">Please see the registration desk.</p>
+      }
+      @case ('invalid') {
+        <mat-icon class="tv-icon">cancel</mat-icon>
+        <h1 class="tv-name">Pass not recognized</h1>
+        <p class="tv-event">Please see the registration desk.</p>
+      }
+      @case ('nomatch') {
+        <mat-icon class="tv-icon">no_accounts</mat-icon>
+        <h1 class="tv-name">Face not registered</h1>
+        <p class="tv-event">{{ resultMessage() }}</p>
+      }
+      @case ('notreg') {
+        <mat-icon class="tv-icon">person_off</mat-icon>
+        <h1 class="tv-name">{{ resultName() }}</h1>
+        <p class="tv-status">Not registered for this event</p>
+        <p class="tv-event">Please see the registration desk.</p>
+      }
+      @case ('notstarted') {
+        <mat-icon class="tv-icon">event_upcoming</mat-icon>
+        <h1 class="tv-name">Check-in not open yet</h1>
+        <p class="tv-event">{{ resultMessage() }}</p>
+      }
+      @case ('ended') {
+        <mat-icon class="tv-icon">event_busy</mat-icon>
+        <h1 class="tv-name">Event ended</h1>
+        <p class="tv-event">{{ resultMessage() }}</p>
+      }
+      @case ('error') {
+        <mat-icon class="tv-icon">wifi_off</mat-icon>
+        <h1 class="tv-name">Connection problem</h1>
+        <p class="tv-event">Please try scanning again.</p>
+      }
+      @default {
+        @if (eventBanner()) {
+          <img class="tv-banner-img" [src]="eventBanner()" [alt]="eventTitle() + ' banner'" />
+        } @else {
+          <mat-icon class="tv-icon idle">waving_hand</mat-icon>
+        }
+        <p class="tv-kicker">{{ eventWelcome() || 'Welcome to' }}</p>
+        <h1 class="tv-name">{{ eventTitle() || resultEvent() || 'the event' }}</h1>
+        <p class="tv-event">Please present your pass to check in.</p>
+        <p class="tv-count"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</p>
+      }
+    }
+  </div>
+}

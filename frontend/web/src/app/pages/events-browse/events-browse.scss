@@ -1,0 +1,148 @@
+.search-field {
+  max-width: 520px;
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+// Stack to a single column on narrow screens.
+@media (max-width: 760px) {
+  .events-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.event-card {
+  overflow: hidden;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+// Body grows so all cards in a row match height and the action sits at the bottom.
+.ev-body {
+  flex: 1 1 auto;
+}
+
+.ev-banner {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+  color: var(--mat-sys-primary);
+}
+
+.ev-banner mat-icon {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+  opacity: 0.6;
+}
+
+.ev-banner.has-image {
+  display: block;
+  height: auto;
+}
+
+.ev-banner.has-image img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+.ev-body {
+  padding: 16px !important;
+}
+
+.ev-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.status-pill.neutral {
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.status-pill.registered {
+  background: #e8f0fe;
+  color: #1967d2;
+}
+
+.ev-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ev-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
+}
+
+.ev-desc {
+  margin: 10px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ev-section {
+  margin: 12px 0;
+}
+
+.ev-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ev-fees {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ev-schedule {
+  margin: 10px 0;
+}
+
+.ev-schedule > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.ev-sessions {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ev-actions {
+  padding: 0 16px 16px;
+  display: flex;
+  gap: 8px;
+}

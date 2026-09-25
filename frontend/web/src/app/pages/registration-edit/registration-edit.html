@@ -1,0 +1,58 @@
+<div class="auth-shell">
+  <mat-card class="auth-card event-card">
+    @if (loading()) {
+      <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+    } @else if (notFound()) {
+      <div class="empty-state">
+        <mat-icon>link_off</mat-icon>
+        <p>This edit link isn't valid. It may have been mistyped or the registration was removed.</p>
+      </div>
+    } @else if (form(); as f) {
+      <mat-card-content>
+        <h1 class="event-heading">{{ f.eventTitle }}</h1>
+        @if (f.sessionTitle) {
+          <p class="detail-row"><mat-icon class="inline-icon">event</mat-icon> {{ f.sessionTitle }}</p>
+        }
+        <p class="muted">Registered as <strong>{{ f.attendeeName }}</strong></p>
+
+        <hr class="divider" />
+
+        @if (saved()) {
+          <div class="success-block">
+            <mat-icon color="primary" class="big-check">check_circle</mat-icon>
+            <h2>Response saved</h2>
+            <p class="muted">Thanks, {{ f.attendeeName }} — your details have been updated.</p>
+            <a mat-stroked-button class="top-gap" [routerLink]="['/e', f.eventSlug]">Back to event</a>
+          </div>
+        } @else if (!f.editable) {
+          <div class="success-block">
+            <mat-icon class="big-check blocked-icon">lock</mat-icon>
+            <h2>Editing closed</h2>
+            <p class="muted">{{ f.lockReason }}</p>
+          </div>
+        } @else if (f.formFields.length === 0) {
+          <div class="success-block">
+            <mat-icon class="big-check">info</mat-icon>
+            <h2>Nothing to edit</h2>
+            <p class="muted">This event has no additional details to update.</p>
+          </div>
+        } @else {
+          <h3 class="form-heading">Update your response</h3>
+          <p class="muted no-account-note">Change any of your answers below, then save.</p>
+
+          <app-dynamic-fields #dyn [fields]="f.formFields" [initial]="f.responses"></app-dynamic-fields>
+
+          <button
+            mat-flat-button
+            color="primary"
+            class="full-width"
+            (click)="save()"
+            [disabled]="saving() || !dyn.isValid()"
+          >
+            <mat-icon>save</mat-icon> Save changes
+          </button>
+        }
+      </mat-card-content>
+    }
+  </mat-card>
+</div>

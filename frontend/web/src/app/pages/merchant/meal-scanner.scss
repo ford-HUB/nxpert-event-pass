@@ -1,0 +1,140 @@
+.scanner-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .scanner-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mode-toggle {
+  margin-bottom: 12px;
+}
+
+.meal-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.cam-block {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-reader {
+  width: 100%;
+  min-height: 300px;
+}
+
+.cam-error {
+  margin-top: 12px;
+}
+.cam-error mat-card-content {
+  text-align: center;
+}
+
+.scan-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pulse {
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.barcode-block {
+  text-align: center;
+  padding: 20px;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: 12px;
+}
+.barcode-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: var(--mat-sys-primary);
+}
+.full-width {
+  width: 100%;
+}
+
+.count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+/* Big result banner */
+.result-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 320px;
+  border-radius: 16px;
+  padding: 24px;
+  color: #fff;
+  background: var(--mat-sys-surface-container-high);
+}
+.result-banner h2 {
+  margin: 8px 0 4px;
+  font-size: 26px;
+}
+.banner-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+}
+.banner-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.banner-sub {
+  font-size: 15px;
+  opacity: 0.95;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.result-banner.banner-idle {
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+}
+.idle-icon {
+  color: var(--mat-sys-primary);
+}
+.result-banner.banner-valid {
+  background: #1e8e3e;
+}
+.result-banner.banner-already,
+.result-banner.banner-notvalid {
+  background: #f9ab00;
+}
+.result-banner.banner-invalid,
+.result-banner.banner-error {
+  background: #d93025;
+}

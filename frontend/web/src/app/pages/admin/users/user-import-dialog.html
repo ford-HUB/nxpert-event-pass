@@ -1,0 +1,96 @@
+<h2 mat-dialog-title>Import users</h2>
+
+@if (importing()) {
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+}
+
+<mat-dialog-content class="import-body">
+  @if (result(); as r) {
+    <!-- Result summary -->
+    <p class="note">Import finished. New accounts use the default password <strong>12345</strong>.</p>
+    <div class="summary">
+      <div class="stat created">{{ r.created }}<small>created</small></div>
+      <div class="stat skipped">{{ r.skipped }}<small>skipped (already exist)</small></div>
+      <div class="stat failed">{{ r.failed }}<small>failed</small></div>
+    </div>
+    @if (r.errors.length) {
+      <p class="note">Rows that couldn't be imported:</p>
+      <ul class="err-list">
+        @for (e of r.errors; track $index) {
+          <li><span class="err-row">Row {{ e.row }} ({{ e.name }}):</span> {{ e.message }}</li>
+        }
+      </ul>
+    }
+  } @else {
+    <!-- Upload step -->
+    <p class="note">
+      Upload a <strong>CSV</strong> file of users. Every new account is created with the default
+      password <strong>12345</strong> (users should change it on first sign-in). Rows whose email
+      already exists are skipped.
+    </p>
+
+    <div class="drop-hint">
+      <button mat-flat-button color="primary" (click)="fileInput.click()">
+        <mat-icon>upload_file</mat-icon> Choose CSV file
+      </button>
+      <input #fileInput type="file" accept=".csv,text/csv" hidden (change)="onFile($event)" />
+      <p class="cols">
+        Required columns: <strong>First Name</strong>, <strong>Last Name</strong>, <strong>Email</strong>.
+        Optional: Middle Initial, Username, Senate No, Level, Organization, Phone, Role, Notification Channel.
+      </p>
+      <button mat-button (click)="downloadTemplate()">
+        <mat-icon>download</mat-icon> Download template
+      </button>
+    </div>
+
+    @if (fileName()) {
+      <div class="file-row">
+        <mat-icon>description</mat-icon>
+        <span class="file-name">{{ fileName() }}</span>
+        @if (rows().length) {
+          <span class="note">— {{ rows().length }} row{{ rows().length === 1 ? '' : 's' }} ready</span>
+        }
+      </div>
+    }
+
+    @if (parseError()) {
+      <p class="error-text">{{ parseError() }}</p>
+    }
+
+    @if (rows().length) {
+      <div class="preview-wrap">
+        <table class="preview-table">
+          <thead>
+            <tr><th>First</th><th>Last</th><th>Email</th><th>Role</th><th>Phone</th></tr>
+          </thead>
+          <tbody>
+            @for (u of preview(); track $index) {
+              <tr>
+                <td>{{ u.firstName || '—' }}</td>
+                <td>{{ u.lastName || '—' }}</td>
+                <td>{{ u.email || '—' }}</td>
+                <td>{{ u.role || 'Participant' }}</td>
+                <td>{{ u.phone || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (rows().length > 5) {
+        <p class="note">…and {{ rows().length - 5 }} more.</p>
+      }
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (result()) {
+    <button mat-flat-button color="primary" (click)="done()">Done</button>
+  } @else {
+    <button mat-button (click)="cancel()">Cancel</button>
+    <button mat-flat-button color="primary" (click)="runImport()"
+            [disabled]="importing() || rows().length === 0">
+      <mat-icon>group_add</mat-icon> Import {{ rows().length || '' }}
+    </button>
+  }
+</mat-dialog-actions>

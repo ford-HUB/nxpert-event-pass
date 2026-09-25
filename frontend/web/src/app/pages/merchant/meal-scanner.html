@@ -1,0 +1,96 @@
+<div class="page-title">
+  <mat-icon color="primary">restaurant</mat-icon>
+  <h1>Meal Stub Scanner</h1>
+  <span class="spacer"></span>
+  <span class="count-chip" title="Total meal stubs you have redeemed, across all sessions">
+    <mat-icon class="inline-icon">redeem</mat-icon>
+    {{ redeemedCount() }} redeemed@if (redeemedValue()) { · ₱{{ redeemedValue() | number }} }
+  </span>
+</div>
+
+<div class="scanner-layout">
+  <div class="scanner-col">
+    <mat-button-toggle-group class="mode-toggle" [value]="input()"
+        (change)="setInput($event.value)" aria-label="Scan input">
+      <mat-button-toggle value="camera"><mat-icon>photo_camera</mat-icon> Camera</mat-button-toggle>
+      <mat-button-toggle value="barcode"><mat-icon>qr_code_scanner</mat-icon> Barcode</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <p class="muted meal-hint">
+      <mat-icon class="inline-icon">info</mat-icon>
+      Scan a meal stub's QR code to redeem it. Each stub is valid once.
+    </p>
+
+    @if (input() === 'camera') {
+      <div class="cam-block">
+        <div id="meal-qr-reader" class="qr-reader"></div>
+      </div>
+      @if (cameraError()) {
+        <mat-card class="cam-error">
+          <mat-card-content>
+            <mat-icon color="warn">videocam_off</mat-icon>
+            <p>{{ cameraError() }}</p>
+            <button mat-flat-button color="primary" (click)="start()">Retry camera</button>
+          </mat-card-content>
+        </mat-card>
+      } @else if (scanning()) {
+        <p class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Scanning…</p>
+      }
+    } @else {
+      <div class="barcode-block">
+        <mat-icon class="barcode-icon">qr_code_scanner</mat-icon>
+        <p class="muted">Scan a stub with your scanner — or type its code and press Enter.</p>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Stub code</mat-label>
+          <input #barcodeInput matInput name="barcode" [(ngModel)]="barcodeValue"
+                 (keyup.enter)="submitBarcode()" (blur)="onBarcodeBlur()"
+                 autocomplete="off" placeholder="Waiting for scan…" />
+          <mat-icon matSuffix>keyboard</mat-icon>
+        </mat-form-field>
+      </div>
+    }
+  </div>
+
+  <div class="result-banner" [class]="'banner-' + banner()">
+    @switch (banner()) {
+      @case ('valid') {
+        <mat-icon class="banner-icon">check_circle</mat-icon>
+        <h2>Stub redeemed</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        @if (resultLabel()) {
+          <p class="banner-sub">
+            @if (resultColor()) { <span class="swatch" [style.background]="resultColor()"></span> }
+            {{ resultLabel() }}@if (resultValue()) { · ₱{{ resultValue() }} }
+          </p>
+        }
+      }
+      @case ('already') {
+        <mat-icon class="banner-icon">error</mat-icon>
+        <h2>Already redeemed</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('invalid') {
+        <mat-icon class="banner-icon">cancel</mat-icon>
+        <h2>Invalid stub</h2>
+        <p class="banner-sub">{{ resultMessage() || 'This QR code is not a meal stub.' }}</p>
+      }
+      @case ('notvalid') {
+        <mat-icon class="banner-icon">event_busy</mat-icon>
+        <h2>Not valid today</h2>
+        <p class="banner-name">{{ resultName() }}</p>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @case ('error') {
+        <mat-icon class="banner-icon">wifi_off</mat-icon>
+        <h2>Request failed</h2>
+        <p class="banner-sub">{{ resultMessage() }}</p>
+      }
+      @default {
+        <mat-icon class="banner-icon idle-icon">restaurant_menu</mat-icon>
+        <h2>Ready to scan</h2>
+        <p class="banner-sub">Point the camera at a meal stub's QR code.</p>
+      }
+    }
+  </div>
+</div>

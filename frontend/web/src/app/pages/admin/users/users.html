@@ -1,0 +1,192 @@
+<div class="toolbar-row">
+  <div class="page-title">
+    <mat-icon color="primary">manage_accounts</mat-icon>
+    <h1>Users</h1>
+  </div>
+  <span class="spacer"></span>
+  <button mat-stroked-button (click)="importUsers()">
+    <mat-icon>upload_file</mat-icon> Import
+  </button>
+  <button mat-flat-button color="primary" (click)="add()">
+    <mat-icon>person_add</mat-icon> Add user
+  </button>
+</div>
+
+@if (loading()) {
+  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+} @else {
+  <div class="toolbar-row">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Search users</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
+             placeholder="Name, username, email, Senate No., level, or chapter" />
+      @if (search()) {
+        <button matIconSuffix mat-icon-button aria-label="Clear" (click)="search.set('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+  </div>
+
+  <p class="muted count-line">
+    {{ users().length }} user{{ users().length === 1 ? '' : 's' }} ·
+    {{ confirmerCount() }} can confirm registrations
+  </p>
+
+  @if (filtered().length === 0) {
+    <div class="empty-state">
+      <mat-icon>group_off</mat-icon>
+      <p>No users match your search.</p>
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="paged()" multiTemplateDataRows>
+        <!-- Expand toggle (mobile only) -->
+        <ng-container matColumnDef="expand">
+          <th mat-header-cell *matHeaderCellDef class="expand-cell"></th>
+          <td mat-cell *matCellDef="let u" class="expand-cell">
+            <button mat-icon-button class="expand-btn" [class.open]="isExpanded(u)"
+                    (click)="toggleExpand(u)"
+                    [attr.aria-label]="isExpanded(u) ? 'Collapse details' : 'Expand details'">
+              <mat-icon>expand_more</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let u">
+            <div class="u-name">
+              {{ u.fullName }}
+              @if (u.hasFace) {
+                <mat-icon class="inline-icon face-badge" matTooltip="Face registered">face</mat-icon>
+              }
+            </div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="username">
+          <th mat-header-cell *matHeaderCellDef>Username</th>
+          <td mat-cell *matCellDef="let u">{{ u.username }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef>Email</th>
+          <td mat-cell *matCellDef="let u">{{ u.email }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="senate">
+          <th mat-header-cell *matHeaderCellDef>Senate No.</th>
+          <td mat-cell *matCellDef="let u">{{ u.senateNo || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="organization">
+          <th mat-header-cell *matHeaderCellDef>Chapter</th>
+          <td mat-cell *matCellDef="let u">{{ u.organization || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="role">
+          <th mat-header-cell *matHeaderCellDef>Role</th>
+          <td mat-cell *matCellDef="let u">
+            <span class="role-pill" [class.admin]="u.role !== 'Participant'">{{ u.role }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="level">
+          <th mat-header-cell *matHeaderCellDef>Level</th>
+          <td mat-cell *matCellDef="let u">{{ u.level || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="notify">
+          <th mat-header-cell *matHeaderCellDef>Pass via</th>
+          <td mat-cell *matCellDef="let u">
+            <span class="notify-chip" [class.viber]="u.notificationChannel === 'Viber'">
+              <mat-icon class="inline-icon">{{ u.notificationChannel === 'Viber' ? 'chat' : 'mail' }}</mat-icon>
+              {{ u.notificationChannel }}
+            </span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="grant">
+          <th mat-header-cell *matHeaderCellDef>Confirm grant</th>
+          <td mat-cell *matCellDef="let u">
+            @if (u.role !== 'Participant') {
+              <span class="grant-chip yes" matTooltip="Admins can always confirm">
+                <mat-icon class="inline-icon">verified_user</mat-icon> Admin
+              </span>
+            } @else if (u.canConfirmRegistrations) {
+              <span class="grant-chip yes">
+                <mat-icon class="inline-icon">check_circle</mat-icon> Granted
+              </span>
+            } @else {
+              <span class="grant-chip no">—</span>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let u" class="actions-cell">
+            <button mat-icon-button (click)="edit(u)" matTooltip="Edit">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" (click)="remove(u)" matTooltip="Delete">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <!-- Detail row: the columns hidden on mobile, revealed on expand -->
+        <ng-container matColumnDef="detail">
+          <td mat-cell *matCellDef="let u" class="detail-cell" [attr.colspan]="displayedColumns().length">
+            <div class="u-detail" [class.open]="isExpanded(u)">
+              <dl class="u-dl">
+                <div><dt>Username</dt><dd>{{ u.username || '—' }}</dd></div>
+                <div><dt>Email</dt><dd>{{ u.email }}</dd></div>
+                <div><dt>Senate No.</dt><dd>{{ u.senateNo || '—' }}</dd></div>
+                <div><dt>Chapter</dt><dd>{{ u.organization || '—' }}</dd></div>
+                <div><dt>Level</dt><dd>{{ u.level || '—' }}</dd></div>
+                <div>
+                  <dt>Pass via</dt>
+                  <dd>
+                    <span class="notify-chip" [class.viber]="u.notificationChannel === 'Viber'">
+                      <mat-icon class="inline-icon">{{ u.notificationChannel === 'Viber' ? 'chat' : 'mail' }}</mat-icon>
+                      {{ u.notificationChannel }}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Confirm grant</dt>
+                  <dd>
+                    @if (u.role !== 'Participant') {
+                      Admin
+                    } @else if (u.canConfirmRegistrations) {
+                      Granted
+                    } @else {
+                      —
+                    }
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+        <!-- Detail row only participates in the mobile (compact) layout -->
+        <tr mat-row *matRowDef="let row; columns: ['detail']; when: isMobile" class="detail-row"></tr>
+      </table>
+    </div>
+
+    <mat-paginator
+      [length]="filtered().length"
+      [pageIndex]="pageIndex()"
+      [pageSize]="pageSize()"
+      [pageSizeOptions]="pageSizeOptions"
+      showFirstLastButtons
+      (page)="onPage($event)"
+    ></mat-paginator>
+  }
+}

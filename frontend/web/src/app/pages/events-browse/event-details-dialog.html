@@ -1,0 +1,97 @@
+<h2 mat-dialog-title class="dlg-title">{{ e.title }}</h2>
+
+<mat-dialog-content>
+  @if (e.bannerImage) {
+    <div class="dlg-banner">
+      <img class="zoomable" [src]="e.bannerImage" [alt]="e.title + ' banner'"
+           (click)="viewImage(e.bannerImage)" />
+    </div>
+  }
+  <p class="ev-row"><mat-icon class="inline-icon">schedule</mat-icon>
+    {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'MMM d, h:mm a' }}
+  </p>
+  <p class="ev-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+  @if (registered) {
+    <p class="ev-row registered-note">
+      <mat-icon class="inline-icon">check_circle</mat-icon>
+      You're already registered for this event.
+    </p>
+  }
+  @if (e.description) { <p class="dlg-desc">{{ e.description }}</p> }
+
+  @if (e.registrationFees) {
+    <div class="info-block">
+      <h3 class="info-heading"><mat-icon class="inline-icon">payments</mat-icon> Registration fees</h3>
+      <p class="fees-text">{{ e.registrationFees }}</p>
+    </div>
+  }
+
+  @if (e.schedule.length > 0) {
+    <div class="info-block">
+      <h3 class="info-heading"><mat-icon class="inline-icon">event_note</mat-icon> Schedule of activities</h3>
+      <div class="schedule-table-wrap">
+        <table class="schedule-table">
+          <thead><tr><th>Day</th><th>Time</th><th>Activity</th></tr></thead>
+          <tbody>
+            @for (row of e.schedule; track $index) {
+              <tr>
+                <td>{{ row.day || '—' }}</td>
+                <td>{{ row.time || '—' }}</td>
+                <td>{{ row.activity }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  @if (e.sessions.length > 0) {
+    <div class="info-block">
+      <h3 class="info-heading"><mat-icon class="inline-icon">calendar_view_day</mat-icon> Sub-events</h3>
+      <div class="dsc-list">
+        @for (s of e.sessions; track s.id) {
+          <div class="dsc-card">
+            @if (s.posterImage) {
+              <img class="dsc-poster zoomable" [src]="s.posterImage" [alt]="s.title + ' poster'"
+                   (click)="viewImage(s.posterImage)" />
+            } @else {
+              <div class="dsc-poster placeholder"><mat-icon>calendar_view_day</mat-icon></div>
+            }
+            <div class="dsc-body">
+              <div class="dsc-title-row">
+                <h4 class="dsc-title">{{ s.title }}</h4>
+                @if (s.isFull) {
+                  <span class="status-pill closed">Full</span>
+                } @else if (s.capacity) {
+                  <span class="status-pill ok">{{ s.capacity - s.registeredCount }} left</span>
+                }
+              </div>
+              <p class="dsc-meta"><mat-icon class="inline-icon">schedule</mat-icon>
+                {{ s.startsAt | date: 'EEE, MMM d, h:mm a' }} – {{ s.endsAt | date: 'h:mm a' }}
+              </p>
+              @if (s.venue) {
+                <p class="dsc-meta"><mat-icon class="inline-icon">place</mat-icon> {{ s.venue }}</p>
+              }
+              @if (s.description) { <p class="dsc-desc">{{ s.description }}</p> }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Close</button>
+  @if (blocked) {
+    <button mat-stroked-button color="primary" (click)="goMyEvents()">
+      <mat-icon>check_circle</mat-icon> Registered
+    </button>
+  } @else {
+    <button mat-flat-button color="primary" (click)="register()">
+      <mat-icon>how_to_reg</mat-icon>
+      {{ isPast() ? 'View details' : (registered ? 'Add sub-event' : 'Register') }}
+    </button>
+  }
+</mat-dialog-actions>

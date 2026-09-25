@@ -1,0 +1,67 @@
+<div class="toolbar-row">
+  <div class="page-title">
+    <mat-icon color="primary">settings</mat-icon>
+    <h1>Settings</h1>
+  </div>
+</div>
+
+<div class="settings-body">
+  <mat-card class="settings-card">
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+    <mat-card-content>
+      <h2 class="section-title">Email CC recipients</h2>
+      <p class="muted section-sub">
+        These addresses are copied (CC) on every email the system sends — registration passes,
+        invitations, verification, and kit-claim notices. Add one or more addresses.
+      </p>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>CC email addresses</mat-label>
+        <mat-chip-grid #chipGrid aria-label="CC email addresses">
+          @for (email of ccEmails(); track email) {
+            <mat-chip-row (removed)="remove(email)">
+              {{ email }}
+              <button matChipRemove [attr.aria-label]="'Remove ' + email">
+                <mat-icon>cancel</mat-icon>
+              </button>
+            </mat-chip-row>
+          }
+          <input
+            placeholder="Type an email and press Enter"
+            [matChipInputFor]="chipGrid"
+            [matChipInputSeparatorKeyCodes]="[13, 188, 32]"
+            (matChipInputTokenEnd)="add($event)" />
+        </mat-chip-grid>
+        <mat-icon matSuffix>mail</mat-icon>
+        <mat-hint>Press Enter, comma, or space to add each address.</mat-hint>
+      </mat-form-field>
+      @if (inputError()) {
+        <p class="error-text">{{ inputError() }}</p>
+      }
+
+      <h2 class="section-title mobile-head">Mobile notification channel</h2>
+      <p class="muted section-sub">
+        How phone notifications (entry pass, kit-claim, and edit-link messages) are delivered to
+        registrants who chose a phone channel. Email delivery is unaffected.
+      </p>
+      <mat-button-toggle-group [value]="mobileProvider()"
+                               (change)="mobileProvider.set($event.value)"
+                               aria-label="Mobile notification provider">
+        <mat-button-toggle value="Viber"><mat-icon>chat</mat-icon> Viber</mat-button-toggle>
+        <mat-button-toggle value="Sms"><mat-icon>sms</mat-icon> SMS</mat-button-toggle>
+      </mat-button-toggle-group>
+      <p class="muted section-sub mobile-note">
+        SMS is text only — the QR entry pass is not included in an SMS (registrants can still use
+        the QR sent to their email, or check in by face). Both use Infobip.
+      </p>
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <button mat-flat-button color="primary" (click)="save()" [disabled]="saving() || loading()">
+        <mat-icon>save</mat-icon> Save settings
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>

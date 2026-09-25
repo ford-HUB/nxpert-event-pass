@@ -1,0 +1,635 @@
+@if (sending() || confirming()) {
+  <div class="loading-overlay">
+    <mat-spinner diameter="52"></mat-spinner>
+    <p>{{ confirming() ? 'Confirming registrations…' : 'Sending invitations…' }}</p>
+  </div>
+}
+
+@if (loading()) {
+  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+} @else if (event(); as e) {
+  <div class="toolbar-row">
+    <a mat-icon-button routerLink="/admin/events"><mat-icon>arrow_back</mat-icon></a>
+    <div class="page-title">
+      <mat-icon color="primary">event</mat-icon>
+      <h1>{{ e.title }}</h1>
+    </div>
+    <span class="spacer"></span>
+    @if (auth.canConfirm()) {
+      <button mat-stroked-button (click)="sendViberBroadcast()"
+              matTooltip="Type an announcement and send it over Viber to all registered Viber numbers">
+        <mat-icon>campaign</mat-icon> Viber blast
+      </button>
+    }
+    @if (auth.isAdmin()) {
+      <a mat-stroked-button [routerLink]="['/admin/events', e.id, 'edit']">
+        <mat-icon>edit</mat-icon> Edit
+      </a>
+      <button mat-stroked-button (click)="toggleClosed()">
+        <mat-icon>{{ e.status === 'Closed' ? 'lock_open' : 'lock' }}</mat-icon>
+        {{ e.status === 'Closed' ? 'Reopen' : 'Close' }}
+      </button>
+      <button mat-stroked-button (click)="downloadOfflineBundle()" [disabled]="downloadingBundle()"
+              matTooltip="Download this event's data for offline check-in on a device that can't connect at the venue">
+        <mat-icon>{{ downloadingBundle() ? 'hourglass_top' : 'cloud_download' }}</mat-icon>
+        Offline bundle
+      </button>
+      <button mat-stroked-button color="warn" (click)="deleteEvent()">
+        <mat-icon>delete</mat-icon> Delete
+      </button>
+    }
+  </div>
+
+  <div class="detail-summary">
+    <div class="badge-row">
+      @if (e.status === 'Closed') {
+        <span class="status-pill closed"><mat-icon class="inline-icon">lock</mat-icon> Registration closed</span>
+      } @else if (e.isFull) {
+        <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
+      } @else {
+        <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Registration open</span>
+      }
+    </div>
+    <p class="detail-row"><mat-icon class="inline-icon">schedule</mat-icon>
+      {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'h:mm a' }}</p>
+    <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+    <div class="stat-row">
+      <div class="stat">
+        <span class="stat-num">{{ e.registeredCount }}{{ e.capacity ? '/' + e.capacity : '' }}</span>
+        <span class="muted">{{ e.capacity ? 'registered (capacity)' : 'registered' }}</span>
+      </div>
+      <div class="stat"><span class="stat-num">{{ e.checkedInCount }}</span><span class="muted">checked in</span></div>
+    </div>
+    @if (e.isPublicLinkEnabled) {
+      <div class="link-box">
+        <mat-icon class="inline-icon">link</mat-icon>
+        <span class="link-text">{{ publicUrl() }}</span>
+        <button mat-icon-button (click)="copyLink()" matTooltip="Copy"><mat-icon>content_copy</mat-icon></button>
+      </div>
+    }
+  </div>
+
+  <mat-tab-group>
+    <!-- Invites (admin only) -->
+    @if (auth.isAdmin()) {
+    <mat-tab label="Invite">
+      <div class="tab-body">
+        <div class="contact-head">
+          <h3>Pick contacts</h3>
+          <span class="spacer"></span>
+          @if (selectedCount() > 0) {
+            <span class="status-pill ok">{{ selectedCount() }} selected</span>
+          }
+        </div>
+
+        @if (contacts().length === 0) {
+          <p class="muted">No seeded contacts.</p>
+        } @else {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Search contacts</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [ngModel]="contactSearch()" (ngModelChange)="onSearch($event)"
+                   placeholder="Name, email, or chapter" />
+            @if (contactSearch()) {
+              <button matIconSuffix mat-icon-button aria-label="Clear" (click)="onSearch('')">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+
+          @if (filteredContacts().length === 0) {
+            <p class="muted">No contacts match “{{ contactSearch() }}”.</p>
+          } @else {
+            <div class="contact-list">
+              @for (c of pagedContacts(); track c.id) {
+                <mat-checkbox [checked]="isSelected(c.id)" (change)="toggle(c.id)">
+                  {{ c.fullName }}
+                  <span class="muted">· {{ c.email }}@if (c.organization) { · {{ c.organization }} }</span>
+                </mat-checkbox>
+              }
+            </div>
+
+            <mat-paginator
+              [length]="filteredContacts().length"
+              [pageSize]="pageSize()"
+              [pageIndex]="pageIndex()"
+              [pageSizeOptions]="[5, 10, 25, 50]"
+              (page)="onPage($event)"
+              aria-label="Select page of contacts">
+            </mat-paginator>
+          }
+        }
+
+        <mat-form-field appearance="outline" class="full-width extra-emails">
+          <mat-label>Additional emails (comma or space separated)</mat-label>
+          <textarea matInput [(ngModel)]="extraEmails" rows="2"
+            placeholder="guest1@example.com, guest2@example.com"></textarea>
+        </mat-form-field>
+
+        <button mat-flat-button color="primary" (click)="sendInvites()" [disabled]="sending()">
+          <mat-icon>send</mat-icon> Send invitations
+        </button>
+      </div>
+    </mat-tab>
+    }
+
+    <!-- Attendance -->
+    <mat-tab label="Attendance ({{ attendees().length }})">
+      <div class="tab-body">
+        <div class="toolbar-row">
+          <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
+            <mat-label>Search attendees</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [ngModel]="attendeeSearch()" (ngModelChange)="attendeeSearch.set($event)"
+                   placeholder="Name, email, chapter, sub-event, or answer" />
+            @if (attendeeSearch()) {
+              <button matIconSuffix mat-icon-button aria-label="Clear" (click)="attendeeSearch.set('')">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          @if (hasSessions()) {
+            <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+              <mat-label>Sub-event</mat-label>
+              <mat-select [ngModel]="sessionFilter()" (ngModelChange)="sessionFilter.set($event)">
+                <mat-option value="all">All sub-events</mat-option>
+                @for (s of eventSessions(); track s.id) {
+                  <mat-option [value]="s.id">{{ s.title }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+            <mat-label>Status</mat-label>
+            <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+              <mat-option value="all">All statuses</mat-option>
+              <mat-option value="pending">Pending</mat-option>
+              <mat-option value="confirmed">Confirmed</mat-option>
+              <mat-option value="checkedin">Checked in</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (orgOptions().length > 0) {
+            <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+              <mat-label>Chapter</mat-label>
+              <mat-select [ngModel]="orgFilter()" (ngModelChange)="orgFilter.set($event)">
+                <mat-option value="all">All chapters</mat-option>
+                @for (o of orgOptions(); track o) {
+                  <mat-option [value]="o">{{ o }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          @if (pendingCount() > 0) {
+            <span class="status-pill pending">
+              <mat-icon class="inline-icon">hourglass_empty</mat-icon>
+              {{ pendingCount() }} pending confirmation
+            </span>
+          }
+          <span class="spacer"></span>
+          <button
+            mat-flat-button
+            color="primary"
+            (click)="confirmSelected()"
+            [disabled]="confirming() || selectedPendingCount() === 0"
+          >
+            <mat-icon>how_to_reg</mat-icon>
+            Confirm selected@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
+          </button>
+          <button
+            mat-flat-button
+            color="accent"
+            (click)="checkInSelected()"
+            [disabled]="checkingIn() || selectedCheckInCount() === 0"
+          >
+            <mat-icon>fact_check</mat-icon>
+            Check in selected@if (selectedCheckInCount() > 0) { ({{ selectedCheckInCount() }}) }
+          </button>
+          <button mat-stroked-button (click)="exportCsv()" [disabled]="attendees().length === 0">
+            <mat-icon>download</mat-icon> Export CSV
+          </button>
+        </div>
+
+        @if (attendees().length === 0) {
+          <div class="empty-state">
+            <mat-icon>groups</mat-icon>
+            <p>No registrations yet.</p>
+          </div>
+        } @else {
+          <p class="muted result-count">
+            Showing {{ displayedAttendees().length }} of {{ attendees().length }}
+          </p>
+          @if (displayedAttendees().length === 0) {
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <p>No attendees match your search or filter.</p>
+            </div>
+          }
+          <div class="table-wrap" [hidden]="displayedAttendees().length === 0">
+            <table mat-table matSort (matSortChange)="onSort($event)" [dataSource]="displayedAttendees()">
+              <ng-container matColumnDef="select">
+                <th mat-header-cell *matHeaderCellDef>
+                  <mat-checkbox
+                    [checked]="allSelectableSelected()"
+                    [disabled]="selectableAttendees().length === 0"
+                    (change)="toggleAllSelectable()"
+                    matTooltip="Select all not-yet-checked-in">
+                  </mat-checkbox>
+                </th>
+                <td mat-cell *matCellDef="let a">
+                  @if (!a.checkedInAt) {
+                    <mat-checkbox
+                      [checked]="isAttendeeSelected(a.registrationId)"
+                      (change)="toggleAttendee(a.registrationId)">
+                    </mat-checkbox>
+                  }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+                <td mat-cell *matCellDef="let a">{{ a.fullName }}</td>
+              </ng-container>
+              <ng-container matColumnDef="senate">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Senate No.</th>
+                <td mat-cell *matCellDef="let a">{{ a.senateNo || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="phone">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Mobile No.</th>
+                <td mat-cell *matCellDef="let a">{{ a.phone || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="email">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
+                <td mat-cell *matCellDef="let a">{{ a.email }}</td>
+              </ng-container>
+              <ng-container matColumnDef="session">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-event</th>
+                <td mat-cell *matCellDef="let a">{{ a.sessionTitle || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="registered">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Registered</th>
+                <td mat-cell *matCellDef="let a">{{ a.registeredAt | date: 'MMM d, h:mm a' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
+                <td mat-cell *matCellDef="let a">
+                  @switch (attendeeStatus(a)) {
+                    @case ('checkedin') {
+                      <span class="status-pill ok"><mat-icon class="inline-icon">check_circle</mat-icon>
+                        Checked in · {{ a.checkedInAt | date: 'h:mm a' }}</span>
+                      @if (a.checkInMethod) {
+                        <span class="method-tag" [class.manual]="a.checkInMethod === 'Manual'">{{ a.checkInMethod }}</span>
+                      }
+                    }
+                    @case ('confirmed') {
+                      <span class="status-pill ok"><mat-icon class="inline-icon">verified</mat-icon>
+                        Confirmed</span>
+                    }
+                    @default {
+                      <span class="status-pill pending"><mat-icon class="inline-icon">hourglass_empty</mat-icon>
+                        Pending</span>
+                    }
+                  }
+                </td>
+              </ng-container>
+
+              <!-- Dynamic columns from the event's custom form fields -->
+              @for (f of formFields(); track f.key) {
+                <ng-container [matColumnDef]="colId(f.key)">
+                  <th mat-header-cell *matHeaderCellDef>{{ f.label }}</th>
+                  <td mat-cell *matCellDef="let a">
+                    @if (f.type === 'image' && a.responses?.[f.key]) {
+                      <button type="button" class="ff-thumb-btn" matTooltip="View full image"
+                              (click)="viewImage(a.responses[f.key], f.label, a.fullName)">
+                        <img class="ff-thumb" [src]="a.responses[f.key]" [alt]="f.label" />
+                      </button>
+                    } @else {
+                      {{ a.responses?.[f.key] || '—' }}
+                    }
+                  </td>
+                </ng-container>
+              }
+
+              <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+            </table>
+          </div>
+        }
+      </div>
+    </mat-tab>
+
+    <!-- Kit Claiming (admin only) -->
+    @if (auth.isAdmin()) {
+    <mat-tab label="Kit Claiming ({{ kitClaimedCount() }}/{{ attendees().length }})">
+      <div class="tab-body">
+        <div class="toolbar-row">
+          <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
+            <mat-label>Search</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [ngModel]="kitSearch()" (ngModelChange)="kitSearch.set($event)"
+                   placeholder="Name, email, chapter, or claimer" />
+            @if (kitSearch()) {
+              <button matIconSuffix mat-icon-button aria-label="Clear" (click)="kitSearch.set('')">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+            <mat-label>Kit status</mat-label>
+            <mat-select [ngModel]="kitClaimFilter()" (ngModelChange)="kitClaimFilter.set($event)">
+              <mat-option value="all">All</mat-option>
+              <mat-option value="unclaimed">Not claimed</mat-option>
+              <mat-option value="claimed">Claimed</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (orgOptions().length > 0) {
+            <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+              <mat-label>Chapter</mat-label>
+              <mat-select [ngModel]="kitOrgFilter()" (ngModelChange)="kitOrgFilter.set($event)">
+                <mat-option value="all">All chapters</mat-option>
+                @for (o of orgOptions(); track o) {
+                  <mat-option [value]="o">{{ o }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          <span class="spacer"></span>
+          <button
+            mat-flat-button
+            color="primary"
+            (click)="claimKitSelected()"
+            [disabled]="kitClaiming() || selectedKitClaimableCount() === 0"
+          >
+            <mat-icon>redeem</mat-icon>
+            Mark kit claimed@if (selectedKitClaimableCount() > 0) { ({{ selectedKitClaimableCount() }}) }
+          </button>
+          <button
+            mat-stroked-button
+            (click)="unclaimKitSelected()"
+            [disabled]="kitClaiming() || selectedKitClaimedCount() === 0"
+          >
+            <mat-icon>undo</mat-icon>
+            Clear claim@if (selectedKitClaimedCount() > 0) { ({{ selectedKitClaimedCount() }}) }
+          </button>
+        </div>
+
+        @if (attendees().length === 0) {
+          <div class="empty-state">
+            <mat-icon>redeem</mat-icon>
+            <p>No registrations yet.</p>
+          </div>
+        } @else {
+          <p class="muted result-count">
+            Showing {{ kitDisplayed().length }} of {{ attendees().length }}
+          </p>
+          @if (kitDisplayed().length === 0) {
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <p>No registrants match your search or filter.</p>
+            </div>
+          }
+          <div class="table-wrap" [hidden]="kitDisplayed().length === 0">
+            <table mat-table matSort (matSortChange)="onKitSort($event)" [dataSource]="kitDisplayed()">
+              <ng-container matColumnDef="kitselect">
+                <th mat-header-cell *matHeaderCellDef>
+                  <mat-checkbox
+                    [checked]="allKitsSelected()"
+                    [disabled]="kitDisplayed().length === 0"
+                    (change)="toggleAllKits()"
+                    matTooltip="Select all">
+                  </mat-checkbox>
+                </th>
+                <td mat-cell *matCellDef="let a">
+                  <mat-checkbox
+                    [checked]="isKitSelected(a.registrationId)"
+                    (change)="toggleKit(a.registrationId)">
+                  </mat-checkbox>
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+                <td mat-cell *matCellDef="let a">{{ a.fullName }}</td>
+              </ng-container>
+              <ng-container matColumnDef="senate">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Senate No.</th>
+                <td mat-cell *matCellDef="let a">{{ a.senateNo || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="phone">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Mobile No.</th>
+                <td mat-cell *matCellDef="let a">{{ a.phone || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="email">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
+                <td mat-cell *matCellDef="let a">{{ a.email }}</td>
+              </ng-container>
+              <ng-container matColumnDef="session">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-event</th>
+                <td mat-cell *matCellDef="let a">{{ a.sessionTitle || '—' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="registered">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Registered</th>
+                <td mat-cell *matCellDef="let a">{{ a.registeredAt | date: 'MMM d, h:mm a' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="kit">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Kit</th>
+                <td mat-cell *matCellDef="let a">
+                  @if (a.kitClaimedAt) {
+                    <span class="status-pill ok"><mat-icon class="inline-icon">redeem</mat-icon>
+                      Claimed · {{ a.kitClaimedAt | date: 'MMM d, h:mm a' }}</span>
+                  } @else {
+                    <span class="status-pill pending"><mat-icon class="inline-icon">inventory_2</mat-icon>
+                      Not claimed</span>
+                  }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="claimedby">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Claimed by</th>
+                <td mat-cell *matCellDef="let a">
+                  @if (a.kitClaimedBy) {
+                    {{ a.kitClaimedBy }}@if (isSelfClaimed(a)) { <span class="kit-self">(self)</span> }
+                  } @else {
+                    —
+                  }
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="kitColumns()"></tr>
+              <tr mat-row *matRowDef="let row; columns: kitColumns()"></tr>
+            </table>
+          </div>
+        }
+      </div>
+    </mat-tab>
+    }
+
+    <!-- Meal stubs (admin only) — one row per issued stub, with the redeeming merchant -->
+    @if (auth.isAdmin() && eventHasMealDefs()) {
+    <mat-tab label="Meal Stubs ({{ stubTotals().redeemed }}/{{ stubTotals().total }})">
+      <div class="tab-body">
+        <div class="toolbar-row">
+          <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
+            <mat-label>Search</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [ngModel]="stubSearch()" (ngModelChange)="stubSearch.set($event)"
+                   placeholder="Participant, chapter, stub, merchant, or control #" />
+            @if (stubSearch()) {
+              <button matIconSuffix mat-icon-button aria-label="Clear" (click)="stubSearch.set('')">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+            <mat-label>Status</mat-label>
+            <mat-select [ngModel]="stubStatusFilter()" (ngModelChange)="stubStatusFilter.set($event)">
+              <mat-option value="all">All</mat-option>
+              <mat-option value="unredeemed">Not redeemed</mat-option>
+              <mat-option value="redeemed">Redeemed</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (redeemedAtOptions().length > 0) {
+            <mat-form-field appearance="outline" class="session-filter" subscriptSizing="dynamic">
+              <mat-label>Redeemed at</mat-label>
+              <mat-select [ngModel]="redeemedAtFilter()" (ngModelChange)="redeemedAtFilter.set($event)">
+                <mat-option value="all">All merchants</mat-option>
+                @for (m of redeemedAtOptions(); track m) {
+                  <mat-option [value]="m">{{ m }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          <span class="status-pill neutral">
+            ₱{{ filteredRedeemed().value | number: '1.2-2' }} redeemed
+            @if (redeemedAtFilter() !== 'all') { at {{ redeemedAtFilter() }} }
+            ({{ filteredRedeemed().count }})
+          </span>
+          <span class="spacer"></span>
+          <button mat-flat-button color="primary" (click)="redeemStubsSelected()"
+                  [disabled]="stubRedeeming() || selectedStubRedeemable() === 0">
+            <mat-icon>restaurant</mat-icon>
+            Redeem@if (selectedStubRedeemable() > 0) { ({{ selectedStubRedeemable() }}) }
+          </button>
+          <button mat-stroked-button (click)="unredeemStubsSelected()"
+                  [disabled]="stubRedeeming() || selectedStubRedeemed() === 0">
+            <mat-icon>undo</mat-icon>
+            Clear@if (selectedStubRedeemed() > 0) { ({{ selectedStubRedeemed() }}) }
+          </button>
+        </div>
+        <p class="muted result-count">
+          Each stub is listed separately — the same member's stubs can be redeemed by different
+          merchants. Stubs are generated and emailed when a registration is confirmed.
+        </p>
+
+        @if (stubList().length === 0) {
+          <div class="empty-state">
+            <mat-icon>restaurant</mat-icon>
+            <p>No stubs issued yet — confirm registrations to generate them.</p>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table mat-table [dataSource]="filteredStubs()">
+              <ng-container matColumnDef="sselect">
+                <th mat-header-cell *matHeaderCellDef>
+                  <mat-checkbox [checked]="allStubsSelected()" [disabled]="filteredStubs().length === 0"
+                                (change)="toggleAllStubs()" matTooltip="Select all"></mat-checkbox>
+                </th>
+                <td mat-cell *matCellDef="let s">
+                  <mat-checkbox [checked]="isStubSelected(s.stubId)"
+                                (change)="toggleStub(s.stubId)"></mat-checkbox>
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Participant</th>
+                <td mat-cell *matCellDef="let s">
+                  {{ s.fullName }}
+                  @if (s.organization) { <span class="muted">· {{ s.organization }}</span> }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="stub">
+                <th mat-header-cell *matHeaderCellDef>Stub</th>
+                <td mat-cell *matCellDef="let s">
+                  <span class="meal-swatch" [style.background]="s.color || '#5f6368'"></span>
+                  {{ s.name }}@if (s.day > 0) { <span class="muted"> · Day {{ s.day }}</span> }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="denom">
+                <th mat-header-cell *matHeaderCellDef>Denom.</th>
+                <td mat-cell *matCellDef="let s">₱{{ s.denomination | number: '1.2-2' }}</td>
+              </ng-container>
+              <ng-container matColumnDef="control">
+                <th mat-header-cell *matHeaderCellDef>Control #</th>
+                <td mat-cell *matCellDef="let s"><code>{{ controlShort(s) }}</code></td>
+              </ng-container>
+              <ng-container matColumnDef="sstatus">
+                <th mat-header-cell *matHeaderCellDef>Status</th>
+                <td mat-cell *matCellDef="let s">
+                  @if (s.redeemedAt) {
+                    <span class="status-pill ok"><mat-icon class="inline-icon">check_circle</mat-icon>
+                      Redeemed · {{ s.redeemedAt | date: 'MMM d, h:mm a' }}</span>
+                  } @else {
+                    <span class="status-pill pending"><mat-icon class="inline-icon">restaurant_menu</mat-icon>
+                      Not redeemed</span>
+                  }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="merchant">
+                <th mat-header-cell *matHeaderCellDef>Redeemed at</th>
+                <td mat-cell *matCellDef="let s">
+                  @if (s.redeemedBy) {
+                    {{ s.redeemedBy }}
+                    @if (s.redeemedMethod === 'Scan') { <span class="meal-self">(scan)</span> }
+                  } @else { — }
+                </td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="stubColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: stubColumns"></tr>
+            </table>
+          </div>
+        }
+      </div>
+    </mat-tab>
+    }
+
+    <!-- Feedback (admin only) -->
+    @if (auth.isAdmin()) {
+    <mat-tab label="Feedback ({{ feedback()?.count || 0 }})">
+      <div class="tab-body">
+        @if (feedback(); as fb) {
+          @if (fb.count === 0) {
+            <div class="empty-state">
+              <mat-icon>reviews</mat-icon>
+              <p>No feedback yet.</p>
+            </div>
+          } @else {
+            <div class="rating-summary">
+              <div class="rating-big">{{ fb.averageRating }}</div>
+              <div>
+                <div class="rating-inline">
+                  @for (s of starArray(5); track s) {
+                    <mat-icon>{{ fb.averageRating >= s ? 'star' : (fb.averageRating >= s - 0.5 ? 'star_half' : 'star_border') }}</mat-icon>
+                  }
+                </div>
+                <div class="muted">{{ fb.count }} response{{ fb.count === 1 ? '' : 's' }}</div>
+              </div>
+            </div>
+
+            <div class="feedback-list">
+              @for (item of fb.items; track item.id) {
+                <mat-card class="feedback-item">
+                  <div class="feedback-head">
+                    <strong>{{ item.fullName }}</strong>
+                    <span class="rating-inline">
+                      @for (s of starArray(5); track s) {
+                        <mat-icon>{{ item.rating >= s ? 'star' : 'star_border' }}</mat-icon>
+                      }
+                    </span>
+                  </div>
+                  @if (item.comment) { <p class="feedback-comment">{{ item.comment }}</p> }
+                  <p class="muted feedback-date">{{ item.createdAt | date: 'MMM d, y, h:mm a' }}</p>
+                </mat-card>
+              }
+            </div>
+          }
+        }
+      </div>
+    </mat-tab>
+    }
+  </mat-tab-group>
+}

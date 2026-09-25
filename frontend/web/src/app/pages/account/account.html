@@ -1,0 +1,159 @@
+<div class="page-title">
+  <mat-icon color="primary">manage_accounts</mat-icon>
+  <h1>My account</h1>
+</div>
+
+@if (loading()) {
+  <div class="empty-state"><mat-icon>hourglass_top</mat-icon><p>Loading your account…</p></div>
+} @else {
+  <mat-card class="account-card">
+    @if (saving()) { <mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+    <mat-card-content>
+      <form #f="ngForm" (ngSubmit)="save()">
+        <!-- Profile photo -->
+        <div class="photo-row">
+          <div class="photo-preview" [class.has-image]="previewPhoto()">
+            @if (previewPhoto()) {
+              <img [src]="previewPhoto()" alt="Profile photo preview" />
+            } @else {
+              <mat-icon>account_circle</mat-icon>
+            }
+          </div>
+          <div class="photo-actions">
+            <p class="photo-label">Profile photo <span class="muted">(optional)</span></p>
+            <p class="muted photo-hint">Shown on the welcome screen when you check in at an event.</p>
+            <div class="photo-buttons">
+              <button type="button" mat-stroked-button (click)="photoInput.click()">
+                <mat-icon>photo_camera</mat-icon> {{ previewPhoto() ? 'Change photo' : 'Add photo' }}
+              </button>
+              @if (previewPhoto()) {
+                <button type="button" mat-button (click)="removePhoto()">Remove</button>
+              }
+            </div>
+            @if (photoError()) { <p class="error-text">{{ photoError() }}</p> }
+          </div>
+          <input #photoInput type="file" accept="image/*" hidden (change)="onPhotoSelected($event)" />
+        </div>
+
+        <!-- Facial recognition -->
+        <div class="face-box">
+          <div>
+            <p class="photo-label" style="margin: 0">
+              Face recognition
+              @if (faceRegistered()) {
+                <span class="face-ok"><mat-icon class="inline-icon">verified_user</mat-icon> Registered</span>
+              } @else {
+                <span class="muted">— not registered</span>
+              }
+            </p>
+            <p class="muted photo-hint">
+              Register your face for fast facial-recognition check-in at events. The captured photo
+              is also used as your profile photo.
+            </p>
+          </div>
+          <div class="photo-buttons">
+            <button type="button" mat-stroked-button (click)="registerFace()">
+              <mat-icon>face</mat-icon> {{ faceRegistered() ? 'Re-capture face' : 'Register face' }}
+            </button>
+            @if (faceRegistered()) {
+              <button type="button" mat-button (click)="removeFace()">Remove face</button>
+            }
+          </div>
+        </div>
+
+        <div class="name-row">
+          <mat-form-field appearance="outline" class="nr-first">
+            <mat-label>First name</mat-label>
+            <input matInput name="firstName" [(ngModel)]="firstName" required maxlength="100" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="nr-mi">
+            <mat-label>M.I.</mat-label>
+            <input matInput name="middleInitial" [(ngModel)]="middleInitial" maxlength="5" />
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Last name</mat-label>
+          <input matInput name="lastName" [(ngModel)]="lastName" required maxlength="100" />
+        </mat-form-field>
+
+        <div class="two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>Senate No.</mat-label>
+            <input matInput name="senateNo" [(ngModel)]="senateNo" maxlength="50" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Level</mat-label>
+            <mat-select name="level" [(ngModel)]="level">
+              <mat-option [value]="''">— None —</mat-option>
+              @for (opt of levelOptions; track opt) {
+                <mat-option [value]="opt">{{ opt }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email</mat-label>
+          <input matInput [value]="email" readonly />
+          <mat-icon matSuffix>lock</mat-icon>
+          <mat-hint>Contact an administrator to change your email.</mat-hint>
+        </mat-form-field>
+
+        <div class="two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>Chapter</mat-label>
+            <input matInput name="organization" [(ngModel)]="organization" maxlength="200" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Send my pass via</mat-label>
+            <mat-select name="notificationChannel" [(ngModel)]="notificationChannel">
+              <mat-option value="Email">Email</mat-option>
+              <mat-option value="Viber">Viber</mat-option>
+            </mat-select>
+            <mat-icon matSuffix>{{ notificationChannel === 'Viber' ? 'chat' : 'mail' }}</mat-icon>
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Phone{{ phoneRequired() ? '' : ' (optional)' }}</mat-label>
+          <input matInput name="phone" [(ngModel)]="phone" #phoneModel="ngModel"
+                 maxlength="40" [required]="phoneRequired()" />
+          <mat-icon matSuffix>call</mat-icon>
+          @if (phoneRequired()) {
+            @if (phoneModel.hasError('required')) {
+              <mat-error>A phone number is required when your pass is sent via Viber.</mat-error>
+            } @else {
+              <mat-hint>Your Viber pass will be sent to this number.</mat-hint>
+            }
+          }
+        </mat-form-field>
+
+        <mat-divider class="section-divider"></mat-divider>
+        <h3 class="section-title">Change password</h3>
+        <p class="muted">Leave these blank to keep your current password.</p>
+
+        <div class="two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>Current password</mat-label>
+            <input matInput type="password" name="currentPassword" [(ngModel)]="currentPassword"
+                   autocomplete="current-password" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>New password</mat-label>
+            <input matInput type="password" name="newPassword" [(ngModel)]="newPassword"
+                   minlength="8" autocomplete="new-password" />
+            <mat-hint>At least 8 characters.</mat-hint>
+          </mat-form-field>
+        </div>
+
+        <div class="form-actions">
+          <a mat-button routerLink="/my-events">Cancel</a>
+          <button mat-flat-button color="primary" type="submit" [disabled]="saving() || f.invalid || !valid">
+            Save changes
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+}

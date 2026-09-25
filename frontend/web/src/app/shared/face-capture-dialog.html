@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>Facial registration</h2>
+
+<mat-dialog-content>
+  <div class="face-stage">
+    <!-- Keep the video in the DOM (for the ViewChild) but hide it once captured -->
+    <video #video autoplay playsinline muted class="face-video" [hidden]="!!captured()"></video>
+
+    <!-- Oval guide overlay (live camera only). Turns green while holding a good pose. -->
+    @if (!captured() && !cameraError()) {
+      <div class="face-guide" [class]="'guide-' + guideState()">
+        <div class="face-oval"></div>
+      </div>
+    }
+
+    @if (captured(); as c) {
+      <img [src]="c.image" alt="Captured face" class="face-preview" />
+    }
+  </div>
+
+  @if (cameraError()) {
+    <p class="error-text">{{ cameraError() }}</p>
+  } @else if (!captured()) {
+    <!-- Live positioning hint + hold progress (drives auto-capture) -->
+    <p class="face-hint" [class.is-good]="guideState() === 'good'">
+      @if (guideState() === 'good') {
+        <mat-icon class="hint-icon">check_circle</mat-icon>
+      } @else {
+        <mat-icon class="hint-icon">face</mat-icon>
+      }
+      <span>{{ hint() }}</span>
+    </p>
+    @if (guideState() === 'good') {
+      <mat-progress-bar class="hold-bar" mode="determinate" [value]="holdProgress() * 100"></mat-progress-bar>
+    }
+    @if (loadingModels()) {
+      <p class="muted face-loading">
+        <mat-spinner diameter="18"></mat-spinner> Loading face models…
+      </p>
+    } @else {
+      <p class="muted" style="text-align: center">
+        Line your face up with the oval — it captures automatically, or tap <strong>Capture</strong>.
+      </p>
+    }
+  } @else {
+    <p class="muted" style="text-align: center">Face captured. Use it, or retake.</p>
+  }
+
+  @if (error()) { <p class="error-text">{{ error() }}</p> }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Cancel</button>
+  @if (!captured()) {
+    <button mat-flat-button color="primary" (click)="capture()"
+            [disabled]="busy() || loadingModels() || !!cameraError()">
+      <mat-icon>photo_camera</mat-icon> Capture
+    </button>
+  } @else {
+    <button mat-button (click)="retake()">Retake</button>
+    <button mat-flat-button color="primary" (click)="use()">Use this</button>
+  }
+</mat-dialog-actions>

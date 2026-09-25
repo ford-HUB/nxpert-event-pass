@@ -1,0 +1,30 @@
+<h2 mat-dialog-title>Rate: {{ data.eventTitle }}</h2>
+<mat-dialog-content>
+  <div class="star-row">
+    @for (s of stars; track s) {
+      <button
+        type="button"
+        class="star-btn"
+        (click)="rating.set(s)"
+        (mouseenter)="hover.set(s)"
+        (mouseleave)="hover.set(0)"
+        [attr.aria-label]="s + ' star'"
+      >
+        <mat-icon>{{ (hover() || rating()) >= s ? 'star' : 'star_border' }}</mat-icon>
+      </button>
+    }
+  </div>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Comment (optional)</mat-label>
+    <textarea matInput [(ngModel)]="comment" rows="3" maxlength="1000"
+              placeholder="How was the event?" #commentCtrl></textarea>
+    <mat-hint align="end">{{ commentCtrl.value.length }}/1000</mat-hint>
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-flat-button color="primary" (click)="submit()" [disabled]="rating() < 1 || saving()">
+    Submit
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,64 @@
+<div class="toolbar-row">
+  <div class="page-title">
+    <mat-icon color="primary">event</mat-icon>
+    <h1>Events</h1>
+  </div>
+  <span class="spacer"></span>
+  @if (auth.isAdmin()) {
+    <a mat-flat-button color="primary" routerLink="/admin/events/new">
+      <mat-icon>add</mat-icon> New event
+    </a>
+  }
+</div>
+
+@if (loading()) {
+  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+} @else if (events().length === 0) {
+  <div class="empty-state">
+    <mat-icon>event_note</mat-icon>
+    <p>No events yet.</p>
+    @if (auth.isAdmin()) {
+      <a mat-flat-button color="primary" routerLink="/admin/events/new">Create your first event</a>
+    }
+  </div>
+} @else {
+  <div class="card-grid">
+    @for (e of events(); track e.id) {
+      <mat-card class="clickable event-card-item" [routerLink]="['/admin/events', e.id]">
+        @if (auth.isAdmin()) {
+          <button mat-flat-button color="primary" class="start-scan-btn"
+                  (click)="startScanning(e, $event)"
+                  matTooltip="Open the check-in scanner for this event">
+            <mat-icon>qr_code_scanner</mat-icon> Start
+          </button>
+        }
+        <mat-card-header>
+          <mat-card-title>{{ e.title }}</mat-card-title>
+          <mat-card-subtitle>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p class="muted"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+          <div class="badge-row">
+            @if (e.status === 'Closed') {
+              <span class="status-pill closed"><mat-icon class="inline-icon">lock</mat-icon> Closed</span>
+            } @else if (e.isFull) {
+              <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
+            } @else {
+              <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Open</span>
+            }
+          </div>
+          <div class="stat-row">
+            <div class="stat">
+              <span class="stat-num">{{ e.registeredCount }}{{ e.capacity ? '/' + e.capacity : '' }}</span>
+              <span class="muted">registered</span>
+            </div>
+            <div class="stat">
+              <span class="stat-num">{{ e.checkedInCount }}</span>
+              <span class="muted">checked in</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+}

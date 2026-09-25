@@ -1,0 +1,119 @@
+/* Full-bleed inside the dialog content (content padding is ~20px top / 24px sides). */
+.dlg-banner {
+  margin: -20px -24px 16px;
+}
+
+.dlg-banner img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+/* Keep the action buttons always visible; only the content scrolls. */
+:host ::ng-deep .mat-mdc-dialog-content {
+  max-height: 62vh;
+}
+
+.dlg-title {
+  margin-bottom: 8px;
+  line-height: 1.25;
+}
+
+.ev-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
+}
+
+.dlg-desc {
+  margin: 12px 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.registered-note {
+  color: #1967d2;
+  font-weight: 600;
+}
+
+.ev-sessions {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+/* Sub-events as bigger, poster-forward cards */
+.dsc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dsc-card {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.dsc-poster {
+  display: block;
+  width: 100%;
+  height: 280px;
+  /* Show the whole poster (no cropping); letterbox against the holder background. */
+  object-fit: contain;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.dsc-poster.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.dsc-poster.placeholder mat-icon {
+  font-size: 52px;
+  width: 52px;
+  height: 52px;
+  opacity: 0.6;
+}
+
+.dsc-body {
+  padding: 14px 16px 16px;
+}
+
+.dsc-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dsc-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.dsc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
+}
+
+.dsc-desc {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+}

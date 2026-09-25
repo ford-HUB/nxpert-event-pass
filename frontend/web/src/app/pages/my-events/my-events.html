@@ -1,0 +1,74 @@
+<div class="page-title">
+  <mat-icon color="primary">confirmation_number</mat-icon>
+  <h1>My Events</h1>
+</div>
+
+@if (loading()) {
+  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+} @else if (regs().length === 0) {
+  <div class="empty-state">
+    <mat-icon>event_busy</mat-icon>
+    <p>You're not registered for any events yet.</p>
+    <p class="muted">Registration links arrive by email invitation.</p>
+  </div>
+} @else {
+  <div class="card-grid">
+    @for (reg of regs(); track reg.id) {
+      <mat-card>
+        @if (reg.sessionPosterImage) {
+          <img class="reg-poster zoomable" [src]="reg.sessionPosterImage"
+               [alt]="(reg.sessionTitle || reg.eventTitle) + ' poster'"
+               (click)="viewImage(reg.sessionPosterImage)" />
+        }
+        <mat-card-header>
+          <mat-card-title>{{ reg.eventTitle }}</mat-card-title>
+          @if (reg.sessionTitle) {
+            <mat-card-subtitle><strong>{{ reg.sessionTitle }}</strong></mat-card-subtitle>
+          }
+          <mat-card-subtitle>{{ reg.startsAt | date: 'EEE, MMM d y, h:mm a' }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p class="muted"><mat-icon class="inline-icon">place</mat-icon> {{ reg.venue }}</p>
+          @if (reg.checkedInAt) {
+            <span class="status-pill ok"><mat-icon class="inline-icon">check_circle</mat-icon> Checked in</span>
+          } @else if (reg.confirmedAt) {
+            <span class="status-pill ok"><mat-icon class="inline-icon">verified</mat-icon> Confirmed</span>
+          } @else {
+            <span class="status-pill pending"><mat-icon class="inline-icon">hourglass_empty</mat-icon> Pending confirmation</span>
+          }
+        </mat-card-content>
+        <mat-card-actions class="reg-actions">
+          <button
+            mat-flat-button
+            color="primary"
+            (click)="showPass(reg)"
+            [disabled]="!reg.confirmedAt && !reg.checkedInAt"
+            [matTooltip]="(!reg.confirmedAt && !reg.checkedInAt) ? 'Your pass will be available once your registration is confirmed' : ''"
+          >
+            <mat-icon>qr_code_2</mat-icon> Show pass
+          </button>
+          <!-- <button mat-button (click)="leaveFeedback(reg)">
+            <mat-icon>star_rate</mat-icon> Rate
+          </button> -->
+          <span class="spacer"></span>
+          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="More actions">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            @if (reg.hasFormFields) {
+              <button mat-menu-item (click)="editResponses(reg)">
+                <mat-icon>edit_note</mat-icon> Edit my responses
+              </button>
+            }
+            <button mat-menu-item (click)="resend(reg)" [disabled]="!reg.confirmedAt">
+              <mat-icon>forward_to_inbox</mat-icon> Re-send pass email
+            </button>
+            <button mat-menu-item (click)="cancel(reg)" [disabled]="!!reg.checkedInAt">
+              <mat-icon>event_busy</mat-icon> Cancel registration
+            </button>
+          </mat-menu>
+        </mat-card-actions>
+      </mat-card>
+    }
+  </div>
+}

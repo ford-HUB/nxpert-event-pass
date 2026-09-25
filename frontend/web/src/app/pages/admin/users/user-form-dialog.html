@@ -1,0 +1,170 @@
+@if (saving()) {
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+}
+<h2 mat-dialog-title>{{ isEdit ? 'Edit user' : 'Add user' }}</h2>
+
+<mat-dialog-content>
+  <form #f="ngForm" class="user-form">
+    <div class="row-2">
+      <mat-form-field appearance="outline">
+        <mat-label>First name</mat-label>
+        <input matInput name="firstName" [(ngModel)]="firstName" required maxlength="100" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="mi">
+        <mat-label>M.I.</mat-label>
+        <input matInput name="middleInitial" [(ngModel)]="middleInitial" maxlength="5" />
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Last name</mat-label>
+      <input matInput name="lastName" [(ngModel)]="lastName" required maxlength="100" />
+    </mat-form-field>
+
+    <div class="row-2">
+      <mat-form-field appearance="outline">
+        <mat-label>Senate No.</mat-label>
+        <input matInput name="senateNo" [(ngModel)]="senateNo" maxlength="50" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Level</mat-label>
+        <mat-select name="level" [(ngModel)]="level">
+          <mat-option [value]="''">— None —</mat-option>
+          @for (opt of levelOptions; track opt) {
+            <mat-option [value]="opt">{{ opt }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Email</mat-label>
+      <input matInput type="email" name="email" [(ngModel)]="email" required maxlength="256" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Username</mat-label>
+      <input matInput name="username" [(ngModel)]="username" maxlength="100"
+             autocomplete="off" placeholder="Auto-generated from name if left blank" />
+      <mat-icon matSuffix>alternate_email</mat-icon>
+      <mat-hint>Members can sign in with their username or email. Leave blank to auto-generate.</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ isEdit ? 'New password (leave blank to keep)' : 'Password' }}</mat-label>
+      <input matInput type="password" name="password" [(ngModel)]="password"
+             [required]="!isEdit" minlength="8" autocomplete="new-password" />
+      <mat-hint>At least 8 characters.</mat-hint>
+    </mat-form-field>
+
+    <div class="row-2">
+      <mat-form-field appearance="outline">
+        <mat-label>Role</mat-label>
+        <mat-select name="role" [(ngModel)]="role">
+          <mat-option value="Participant">Participant</mat-option>
+          <mat-option value="Admin">Admin</mat-option>
+          <mat-option value="Merchant">Merchant</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Send pass via</mat-label>
+        <mat-select name="notificationChannel" [(ngModel)]="notificationChannel">
+          <mat-option value="Email">Email</mat-option>
+          <mat-option value="Viber">Viber</mat-option>
+          <mat-option value="Both">Both (Email &amp; Viber)</mat-option>
+        </mat-select>
+        <mat-icon matSuffix>{{ notificationChannel === 'Viber' ? 'chat' : 'mail' }}</mat-icon>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Phone{{ phoneRequired() ? '' : ' (optional)' }}</mat-label>
+      <input matInput name="phone" [(ngModel)]="phone" #phoneModel="ngModel"
+             (input)="onPhoneInput($event)" inputmode="tel" maxlength="16"
+             placeholder="+63 000 000 0000"
+             pattern="\+63 \d{3} \d{3} \d{4}" [required]="phoneRequired()" />
+      <mat-icon matSuffix>call</mat-icon>
+      @if (phoneModel.hasError('required')) {
+        <mat-error>A phone number is required when the pass is sent via Viber.</mat-error>
+      } @else if (phoneModel.hasError('pattern')) {
+        <mat-error>Enter a complete mobile number: +63 000 000 0000.</mat-error>
+      } @else if (phoneRequired()) {
+        <mat-hint>Viber passes are delivered to this number.</mat-hint>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Chapter</mat-label>
+      <input matInput name="organization" [(ngModel)]="organization" maxlength="200" />
+    </mat-form-field>
+
+    <div class="photo-row">
+      <div class="photo-preview" [class.has-image]="previewPhoto()">
+        @if (previewPhoto()) {
+          <img [src]="previewPhoto()" alt="Profile photo preview" />
+        } @else {
+          <mat-icon>account_circle</mat-icon>
+        }
+      </div>
+      <div class="photo-actions">
+        <p class="photo-label">Profile photo <span class="muted">(optional)</span></p>
+        <p class="muted photo-hint">Shown on the check-in TV welcome screen.</p>
+        <div class="photo-buttons">
+          <button type="button" mat-stroked-button (click)="photoInput.click()">
+            <mat-icon>photo_camera</mat-icon> {{ previewPhoto() ? 'Change photo' : 'Add photo' }}
+          </button>
+          @if (previewPhoto()) {
+            <button type="button" mat-button (click)="removePhoto()">Remove</button>
+          }
+        </div>
+        @if (photoError()) { <p class="error-text">{{ photoError() }}</p> }
+      </div>
+      <input #photoInput type="file" accept="image/*" hidden (change)="onPhotoSelected($event)" />
+    </div>
+
+    <div class="grant-box">
+      <div class="face-head">
+        <div>
+          <p class="photo-label" style="margin: 0">
+            Facial registration
+            @if (faceRegistered()) {
+              <span class="face-ok"><mat-icon class="inline-icon">verified_user</mat-icon> Registered</span>
+            } @else {
+              <span class="muted">— not registered</span>
+            }
+          </p>
+          <p class="muted grant-hint">
+            Capture the member's face for facial-recognition check-in. Used only for matching —
+            the <strong>profile photo</strong> above is what's shown on the welcome screen.
+          </p>
+        </div>
+      </div>
+      <div class="photo-buttons">
+        <button type="button" mat-stroked-button (click)="registerFace()">
+          <mat-icon>face</mat-icon> {{ faceRegistered() ? 'Re-capture face' : 'Register face' }}
+        </button>
+        @if (faceRegistered()) {
+          <button type="button" mat-button (click)="removeFace()">Remove face</button>
+        }
+      </div>
+    </div>
+
+    <div class="grant-box">
+      <mat-slide-toggle name="canConfirm" [(ngModel)]="canConfirmRegistrations">
+        Can confirm registrations
+      </mat-slide-toggle>
+      <p class="muted grant-hint">
+        Lets this user confirm event registrations (and email passes) without full admin access.
+        Admins can always confirm.
+      </p>
+    </div>
+
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" (click)="save()" [disabled]="saving() || !valid">
+    {{ isEdit ? 'Save changes' : 'Add user' }}
+  </button>
+</mat-dialog-actions>

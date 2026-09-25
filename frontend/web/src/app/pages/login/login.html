@@ -1,0 +1,67 @@
+<div class="auth-shell">
+  <mat-card class="auth-card">
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+    <mat-card-header>
+      <mat-card-title>
+        <div class="page-title">
+          <mat-icon color="primary">event_available</mat-icon>
+          <h1>Sign in</h1>
+        </div>
+      </mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <form #f="ngForm" (ngSubmit)="submit()">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Username or email</mat-label>
+          <input matInput type="text" name="email" [(ngModel)]="email" #emailCtrl="ngModel"
+                 required autocomplete="username" />
+          <mat-icon matSuffix>person</mat-icon>
+          @if (emailCtrl.hasError('required')) { <mat-error>Username or email is required.</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Password</mat-label>
+          <input
+            matInput
+            [type]="showPassword() ? 'text' : 'password'"
+            name="password"
+            [(ngModel)]="password"
+            #pwdCtrl="ngModel"
+            required
+            autocomplete="current-password"
+          />
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            (click)="showPassword.set(!showPassword())"
+            [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+            [attr.aria-pressed]="showPassword()"
+          >
+            <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          @if (pwdCtrl.hasError('required')) { <mat-error>Password is required.</mat-error> }
+        </mat-form-field>
+
+        <button
+          mat-flat-button
+          color="primary"
+          class="full-width"
+          type="submit"
+          [disabled]="loading() || f.invalid"
+        >
+          Sign in
+        </button>
+      </form>
+
+      <p class="muted signup-line">
+        No account? <a routerLink="/register">Create a participant account</a>
+      </p>
+
+     
+    </mat-card-content>
+  </mat-card>
+</div>

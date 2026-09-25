@@ -1,0 +1,211 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  gap: 8px;
+  height: 60px;
+  // Frosted, light app bar — content scrolls beneath it.
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  color: var(--mat-sys-on-surface) !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-right: 20px;
+}
+
+.brand-badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--brand-grad);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.35);
+}
+
+.brand-badge mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.brand-text {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0; // allow the nav to shrink instead of overflowing the toolbar
+}
+
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 600;
+}
+
+.active-link {
+  background: rgba(13, 148, 136, 0.1);
+  color: var(--mat-sys-primary) !important;
+}
+
+/* Install-app banner (PWA). Shown app-wide until installed or dismissed. */
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+  background: var(--brand-grad-soft);
+  border-bottom: 1px solid rgba(13, 148, 136, 0.25);
+  font-size: 14px;
+
+  .install-icon {
+    color: #0d9488;
+    flex: none;
+  }
+  .install-text {
+    min-width: 0;
+  }
+  .inline-share {
+    font-size: 18px;
+    height: 18px;
+    width: 18px;
+    vertical-align: text-bottom;
+  }
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .install-banner {
+    font-size: 13px;
+    padding: 8px 8px 8px 12px;
+  }
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.user-name {
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 20px 56px;
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+
+  // When the content is an auth shell (login / register), remove the
+  // extra padding so the card can centre itself within the flex area.
+  &:has(.auth-shell) {
+    padding: 0;
+    max-width: 100%;
+  }
+}
+
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  background: linear-gradient(90deg, #fff4d6, #fef7e0);
+  color: #7a4f01;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(176, 96, 0, 0.15);
+}
+
+.verify-banner button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .brand-text,
+  .user-name {
+    display: none;
+  }
+  .brand {
+    margin-right: 6px;
+  }
+  // Icon-only nav on phones; let it scroll horizontally if it still doesn't fit.
+  .nav-links {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-links a {
+    flex: 0 0 auto;
+  }
+  .nav-links a span {
+    display: none;
+  }
+  .app-content {
+    padding: 20px 14px 48px;
+  }
+}
+
+// ---- Branding footer ----
+.branding-footer {
+  width: 100%;
+  padding: 10px 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 -1px 4px rgba(15, 23, 42, 0.04);
+  position: relative;
+  z-index: 10;
+}
+
+.branding-footer__text {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0.8;
+
+  strong {
+    font-weight: 800;
+    opacity: 1;
+  }
+}

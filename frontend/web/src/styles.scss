@@ -1,0 +1,1661 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$green-palette,
+        tertiary: mat.$spring-green-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+// ---- Design tokens (brand, surfaces, elevation) ----
+:root {
+  --brand-grad: linear-gradient(135deg, #0d9488 0%, #22c55e 100%);
+  --brand-grad-soft: linear-gradient(135deg, #e6f7f4 0%, #eafaf0 100%);
+  --app-bg: #f1f7f4;
+  --card-radius: 16px;
+  --hairline: 1px solid rgba(15, 23, 42, 0.08);
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 20px rgba(15, 23, 42, 0.06);
+  --card-shadow-hover: 0 6px 14px rgba(15, 23, 42, 0.08), 0 18px 40px rgba(15, 23, 42, 0.12);
+  --tint-primary: rgba(13, 148, 136, 0.1);
+}
+
+body {
+  color-scheme: light;
+
+  background-color: var(--app-bg);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  margin: 0;
+  height: 100%;
+}
+/* You can add global styles to this file, and also import other style files */
+
+* {
+  box-sizing: border-box;
+}
+
+// ---- Cards: soft, rounded, hairline-bordered, layered shadow ----
+.mat-mdc-card {
+  border-radius: var(--card-radius) !important;
+  border: var(--hairline);
+  box-shadow: var(--card-shadow) !important;
+  background: var(--mat-sys-surface);
+}
+
+// ---- Buttons: crisp modern radius ----
+.mat-mdc-raised-button,
+.mat-mdc-flat-button,
+.mat-mdc-outlined-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-button {
+  border-radius: 10px !important;
+  letter-spacing: 0.1px;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.page-title h1 {
+  margin: 0;
+  font: var(--mat-sys-headline-small);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.full-width {
+  width: 100%;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+/* Start-scan button overlaid on an event card (admin events list) */
+.event-card-item {
+  position: relative;
+}
+
+.start-scan-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+/* Keep the title from running under the Start button */
+.event-card-item .mat-mdc-card-header {
+  padding-right: 108px;
+}
+
+.mat-mdc-card-title {
+  font-weight: 700 !important;
+  letter-spacing: -0.2px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-pill.ok {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.status-pill.pending {
+  background: #fef7e0;
+  color: #b06000;
+}
+
+.status-pill.closed {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+// Small tag showing how a check-in was recorded (Scan / Face / Manual), shown next to the pill.
+.method-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+  vertical-align: middle;
+}
+
+.method-tag.manual {
+  background: #e8f0fe;
+  color: #1967d2;
+}
+
+// "(self)" marker next to a self-claimed kit's claimer name in the kit-claiming grid.
+.kit-self {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1967d2;
+}
+
+.badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.empty-state mat-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+.auth-shell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  // Branded backdrop with a soft glow behind the card.
+  background:
+    radial-gradient(900px 500px at 50% -8%, rgba(13, 148, 136, 0.16), transparent 60%),
+    radial-gradient(700px 500px at 100% 100%, rgba(34, 197, 94, 0.1), transparent 55%),
+    var(--app-bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 430px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+}
+
+.auth-card .mat-mdc-card-content {
+  padding: 8px 24px 24px;
+}
+
+.error-text {
+  color: var(--mat-sys-error);
+  margin: 4px 0 12px;
+  font-size: 14px;
+}
+
+.field-error {
+  margin: -8px 0 12px;
+  font-size: 12.5px;
+}
+
+.signup-line {
+  margin-top: 16px;
+  text-align: center;
+}
+
+// First name + middle initial on one row
+.name-row {
+  display: flex;
+  gap: 10px;
+}
+
+.name-row .nr-first {
+  flex: 1 1 auto;
+}
+
+.name-row .nr-mi {
+  flex: 0 0 84px;
+}
+
+.session-filter {
+  min-width: 220px;
+}
+
+.attendee-search {
+  flex: 1 1 260px;
+  min-width: 240px;
+  max-width: 460px;
+}
+
+.result-count {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+/* ===== Registration-form builder: editable grid ===== */
+.fieldgrid-wrap {
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+}
+
+.fieldgrid {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.fieldgrid th,
+.fieldgrid td {
+  border: 1px solid var(--mat-sys-outline-variant);
+  padding: 0;
+}
+
+.fieldgrid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mat-sys-surface-container-high);
+  padding: 9px 10px;
+  text-align: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fieldgrid td {
+  vertical-align: middle;
+}
+
+.fieldgrid .fg-req,
+.fieldgrid .fg-act {
+  width: 92px;
+  text-align: center;
+}
+
+.cell-input,
+.cell-select {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px;
+  font: inherit;
+  color: inherit;
+  outline: none;
+}
+
+.cell-input:focus,
+.cell-select:focus {
+  background: color-mix(in srgb, var(--mat-sys-primary) 9%, transparent);
+}
+
+/* Conditional-visibility cell: stack the controller + value selects. */
+.fieldgrid .fg-cond {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fieldgrid .fg-cond-none {
+  display: block;
+  padding: 10px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.cell-input:disabled {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.cell-select {
+  cursor: pointer;
+}
+
+.cell-check {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.fg-empty {
+  text-align: center !important;
+  padding: 20px !important;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.schedule-grid-head,
+.schedule-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2.4fr 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.schedule-grid-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mat-sys-on-surface-variant);
+  padding: 0 4px 4px;
+}
+
+@media (max-width: 640px) {
+  .schedule-grid-head { display: none; }
+  .schedule-grid-row {
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 10px;
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+  .schedule-grid-row > mat-form-field:nth-child(3) { grid-column: 1 / -1; }
+}
+
+/* Full-screen busy overlay (e.g. sending invites / confirming registrations) */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: color-mix(in srgb, var(--mat-sys-surface) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.loading-overlay p {
+  margin: 0;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface);
+}
+
+.info-block {
+  margin: 16px 0;
+}
+
+/* Collapsible info sections (registration fees / schedule) */
+.info-collapse {
+  margin: 12px 0;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+  padding: 4px 12px;
+}
+
+.info-collapse > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.info-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Chevron that rotates when open */
+.info-collapse > summary::after {
+  content: 'expand_more';
+  font-family: 'Material Icons';
+  margin-left: auto;
+  font-size: 20px;
+  color: var(--mat-sys-on-surface-variant);
+  transition: transform 0.2s ease;
+}
+
+.info-collapse[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.info-collapse > *:not(summary) {
+  margin-bottom: 10px;
+}
+
+.info-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.fees-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.schedule-table-wrap {
+  overflow-x: auto;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  vertical-align: top;
+}
+
+.schedule-table th {
+  font-size: 12px;
+  color: var(--mat-sys-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.schedule-table td:first-child,
+.schedule-table td:nth-child(2) {
+  white-space: nowrap;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.session-day {
+  margin: 8px 0 12px;
+}
+
+.session-day-label {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--mat-sys-primary);
+}
+
+.session-pick {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.session-pick-meta {
+  font-size: 13px;
+  margin-left: 34px;
+  margin-top: -4px;
+}
+
+.session-row {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.session-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.session-num {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--mat-sys-primary);
+}
+
+/* Full-screen image lightbox: the dialog surface is just a transparent frame. */
+.lightbox-panel .mat-mdc-dialog-surface {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Images the user can click to view full-size */
+.zoomable {
+  cursor: zoom-in;
+}
+
+/* Sub-event poster on a My Events card (full-bleed top image, no overflow) */
+.reg-poster {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: var(--card-radius) var(--card-radius) 0 0;
+  margin-bottom: 8px;
+}
+
+.session-poster {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.session-poster-thumb {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.session-poster-thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.session-poster-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 0 8px;
+}
+
+.photo-preview {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-preview mat-icon {
+  font-size: 44px;
+  width: 44px;
+  height: 44px;
+}
+
+.photo-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.photo-label {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.photo-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.photo-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.demo-hint {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-high);
+  font-size: 13px;
+  text-align: center;
+}
+
+mat-card {
+  overflow: hidden;
+}
+
+.inline-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  vertical-align: text-bottom;
+}
+
+mat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px 12px;
+}
+
+.pass-content {
+  text-align: center;
+}
+
+.qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.qr-wrap img {
+  border: 8px solid #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.pass-hint {
+  font-size: 13px;
+}
+
+.event-card {
+  max-width: 480px;
+  padding: 0;
+}
+
+.event-banner {
+  background: var(--brand-grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.event-banner mat-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+}
+
+.event-banner.has-image {
+  padding: 0;
+  aspect-ratio: 3 / 1;
+}
+
+.event-banner.has-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+// On mobile the 3:1 crop makes portrait/square images unrecognisable.
+// Let the image show at its natural height instead.
+@media (max-width: 600px) {
+  .event-banner.has-image {
+    aspect-ratio: unset;
+    height: auto;
+    background: #000; // pillarbox fallback for very wide images
+  }
+
+  .event-banner.has-image img {
+    width: 100%;
+    height: auto;          // grow to full image height
+    max-height: 60vw;      // cap so a huge image doesn't push content off-screen
+    object-fit: contain;   // show the whole image, no cropping
+  }
+}
+
+.event-heading {
+  margin: 4px 0 16px;
+  font: var(--mat-sys-headline-small);
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.event-desc {
+  margin: 16px 0;
+  line-height: 1.5;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  margin: 20px 0;
+}
+
+.top-gap {
+  margin-top: 8px;
+}
+
+/* "or" separator between two alternative actions (e.g. the two edit-recovery options). */
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.success-block {
+  text-align: center;
+}
+
+.success-block .big-check {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+}
+
+.success-block .blocked-icon {
+  color: #c5221f;
+}
+
+.success-block h2 {
+  margin: 8px 0;
+}
+
+.form-heading {
+  margin: 0 0 4px;
+}
+
+.no-account-note {
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+
+/* Offline / sync status bar on the scanner, above the viewfinder. */
+.offline-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+
+  &.is-offline {
+    background: rgba(240, 173, 78, 0.12);
+    border-color: rgba(240, 173, 78, 0.5);
+  }
+
+  .spacer { flex: 1; }
+
+  .net-chip,
+  .queue-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .net-chip.online { color: #2f9e44; background: rgba(47, 158, 68, 0.12); }
+  .net-chip.offline { color: #b8860b; }
+  .queue-chip { color: #0d9488; background: rgba(13, 148, 136, 0.1); }
+  .sync-msg { font-size: 13px; }
+
+  .inline-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Thumbnail for an uploaded image answer in the attendance table. */
+.ff-thumb-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 6px;
+}
+.ff-thumb {
+  height: 40px;
+  width: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  display: block;
+  transition: transform 0.1s ease;
+}
+.ff-thumb-btn:hover .ff-thumb { transform: scale(1.06); }
+.ff-thumb-btn:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+
+/* Searchable dropdown (custom form 'select' fields). The panel renders in a CDK overlay, so its
+   search box must be styled globally via the mat-select panelClass. */
+.dyn-select-panel {
+  .dyn-select-search {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin: -8px 0 4px;
+    background: var(--mat-sys-surface-container, #fff);
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+  .dyn-search-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+  .dyn-search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    color: var(--mat-sys-on-surface);
+    padding: 4px 0;
+  }
+  .dyn-select-empty {
+    padding: 10px 16px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 13px;
+  }
+}
+
+/* Optional facial-registration opt-in on the public registration form. */
+.face-optin {
+  margin: 8px 0 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-high);
+}
+.face-optin-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+.face-optin-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+.face-optin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* Display-picture upload row (registration form). */
+.dp-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+.dp-preview {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface-variant);
+}
+.dp-preview mat-icon {
+  font-size: 36px;
+  width: 36px;
+  height: 36px;
+}
+.dp-preview.has-image {
+  border-style: solid;
+}
+.dp-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.face-optin .face-ok {
+  color: #1e8e3e;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+}
+
+/* Offline notice on the public registration form. */
+.offline-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8a6d00;
+  background: rgba(240, 173, 78, 0.14);
+  border: 1px solid rgba(240, 173, 78, 0.45);
+}
+
+/* Realtime notifications dropdown (rendered in an overlay, so styled globally). */
+.notif-menu {
+  max-width: 380px;
+
+  .notif-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 6px 6px 16px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+  .notif-heading { font-weight: 600; }
+  .notif-head .spacer { flex: 1; }
+
+  .notif-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 24px 16px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 13px;
+  }
+
+  .notif-item {
+    height: auto;
+    min-height: 0;
+    line-height: 1.35;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .notif-item .notif-text {
+    display: inline-flex;
+    flex-direction: column;
+    white-space: normal;
+  }
+  .notif-line { font-size: 13px; }
+  .notif-time {
+    font-size: 11px;
+    color: var(--mat-sys-on-surface-variant);
+    margin-top: 2px;
+  }
+  .notif-item.unread { background: var(--tint-primary); }
+  .notif-item mat-icon.approved { color: #2f9e44; }
+  .notif-item mat-icon.kit { color: #0d9488; }
+}
+
+.fine-print {
+  font-size: 12px;
+  margin-top: 12px;
+  text-align: center;
+}
+
+.clickable {
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.clickable:hover {
+  box-shadow: var(--card-shadow-hover) !important;
+  transform: translateY(-3px);
+  border-color: rgba(13, 148, 136, 0.35);
+}
+
+.stat-row {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--mat-sys-primary);
+}
+
+.form-card {
+  max-width: 640px;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.two-col mat-form-field {
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.account-card {
+  max-width: 660px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.face-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.face-ok {
+  color: #1e8e3e;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.section-divider {
+  margin: 22px 0 14px;
+}
+
+.section-title {
+  margin: 0 0 2px;
+  font-weight: 700;
+}
+
+// ---- Event banner editor ----
+.banner-editor {
+  margin-bottom: 18px;
+}
+
+.banner-preview {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface-container-high);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.banner-preview img {
+  width: 100%;
+  height: auto;           /* grow to the image's natural height */
+  max-height: 320px;      /* cap so a portrait image doesn't dominate the form */
+  object-fit: contain;    /* show the whole image — no cropping */
+  display: block;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.banner-upload {
+  width: 100%;
+  border-style: dashed !important;
+  padding: 14px 0 !important;
+}
+
+.banner-help {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 6px;
+}
+
+// ---- Registration form builder ----
+.builder-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.builder-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.builder-head > div {
+  flex: 1;
+}
+
+.builder-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.builder-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+
+.field-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+// Meal-stub editor rows inside a sub-event (event form).
+.meal-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--mat-sys-outline-variant);
+}
+.meal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.meal-title {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.meal-empty {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.meal-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.meal-row .meal-name {
+  flex: 1 1 160px;
+}
+.meal-row .meal-denom {
+  flex: 0 0 150px;
+}
+.meal-row .meal-qty {
+  flex: 0 0 90px;
+}
+.meal-row .meal-date {
+  flex: 0 0 150px;
+}
+.meal-color {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+.meal-color input[type='color'] {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.meal-day-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+}
+.meal-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.meal-day-title {
+  font-weight: 700;
+}
+
+.meal-day-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.meal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-high);
+}
+
+// A small colour swatch used to render a stub's colour in tables/lists.
+.meal-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+// "(self)" marker for a self-redeemed meal in the meals grid.
+.meal-self {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1967d2;
+}
+
+.builder-empty {
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.builder-field {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  padding: 14px 14px 2px;
+  margin-bottom: 12px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.builder-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.builder-field-row .bf-label {
+  flex: 1 1 220px;
+}
+
+.builder-field-row .bf-type {
+  flex: 0 0 170px;
+}
+
+.bf-category {
+  flex: 1 1 240px;
+}
+
+.bf-options-inline {
+  flex: 1 1 240px;
+}
+
+.bf-req {
+  margin-bottom: 18px;
+}
+
+.bf-remove {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 560px) {
+  .builder-field-row .bf-type {
+    flex: 1 1 100%;
+  }
+}
+
+.detail-summary {
+  margin-bottom: 16px;
+}
+
+.link-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-high);
+  max-width: 100%;
+}
+
+.link-text {
+  font-family: monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tab-body {
+  padding: 20px 4px;
+}
+
+.contact-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.contact-head h3 {
+  margin: 0;
+}
+
+.contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.extra-emails {
+  margin-top: 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap table {
+  width: 100%;
+}
+
+.verify-body {
+  text-align: center;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.verify-icon {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.metric-card {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric-icon {
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  border-radius: 12px;
+  background: var(--tint-primary);
+  color: var(--mat-sys-primary);
+  margin-bottom: 4px;
+}
+
+.metric-num {
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -1px;
+}
+
+.metric-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.metric-card.accent {
+  background: var(--brand-grad);
+  color: #fff;
+  border: none;
+}
+
+.metric-card.accent .metric-icon {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.metric-card.accent .metric-label {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.section-head {
+  margin-top: 28px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font: var(--mat-sys-title-large);
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.attend-line {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.star-row {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin: 8px 0 20px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #f9ab00;
+}
+
+.star-btn mat-icon {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+}
+
+.rating-inline {
+  display: inline-flex;
+  align-items: center;
+  color: #f9ab00;
+}
+
+.rating-inline mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.rating-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.rating-big {
+  font-size: 44px;
+  font-weight: 700;
+  color: var(--mat-sys-primary);
+  line-height: 1;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedback-item {
+  padding: 14px 16px;
+}
+
+.feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.feedback-comment {
+  margin: 8px 0 4px;
+  line-height: 1.5;
+}
+
+.feedback-date {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ===== Toasts (ToastService) ===== */
+/* Colour every toast by type via the MDC snack-bar tokens, set on the
+   panelClass container. success = green, error = red, warning = amber,
+   info = brand blue. A left accent bar reinforces the type at a glance. */
+.app-toast {
+  --mdc-snackbar-container-color: #1f2733;
+  --mdc-snackbar-supporting-text-color: #fff;
+  --mat-snack-bar-button-color: #fff;
+
+  .mdc-snackbar__surface {
+    border-radius: 12px !important;
+    box-shadow: 0 6px 24px rgba(15, 23, 42, 0.22) !important;
+    border-left: 5px solid rgba(255, 255, 255, 0.55);
+  }
+  .mdc-snackbar__label {
+    font-weight: 600;
+    letter-spacing: 0.1px;
+  }
+}
+
+.app-toast-success {
+  --mdc-snackbar-container-color: #1e8e3e;
+  .mdc-snackbar__surface { border-left-color: #0b5c26; }
+}
+.app-toast-error {
+  --mdc-snackbar-container-color: #c5221f;
+  .mdc-snackbar__surface { border-left-color: #7f1210; }
+}
+.app-toast-warning {
+  --mdc-snackbar-container-color: #b06000;
+  .mdc-snackbar__surface { border-left-color: #6e3c00; }
+}
+.app-toast-info {
+  --mdc-snackbar-container-color: #1967d2;
+  .mdc-snackbar__surface { border-left-color: #0e3f85; }
+}
+
+/* ===== Mobile refinements (participant & shared) ===== */
+@media (max-width: 600px) {
+  /* Card action buttons wrap instead of overflowing the card on phones. */
+  .mat-mdc-card-actions {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* My Events / Browse cards: keep the primary action comfortable to tap. */
+  .ev-actions,
+  .reg-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Page headings a touch smaller so they don't wrap awkwardly. */
+  .page-title h1 {
+    font-size: 22px;
+  }
+
+  /* Tighten card content padding a little on very small screens. */
+  .mat-mdc-card-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

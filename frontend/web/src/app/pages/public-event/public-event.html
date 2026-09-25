@@ -1,0 +1,433 @@
+<div class="auth-shell">
+  <mat-card class="auth-card event-card">
+    @if (loading()) {
+      <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+    } @else if (error() && !event()) {
+      <div class="empty-state">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ error() }}</p>
+        <a mat-button routerLink="/login">Go to sign in</a>
+      </div>
+    } @else if (event(); as e) {
+      @if (e.bannerImage) {
+        <div class="event-banner has-image">
+          <img [src]="e.bannerImage" [alt]="e.title + ' banner'" />
+        </div>
+      } @else {
+        <div class="event-banner">
+          <mat-icon>event</mat-icon>
+        </div>
+      }
+      <mat-card-content>
+        <h1 class="event-heading">{{ e.title }}</h1>
+        <p class="detail-row"><mat-icon class="inline-icon">schedule</mat-icon>
+          {{ e.startsAt | date: 'EEEE, MMMM d y' }} · {{ e.startsAt | date: 'h:mm a' }}–{{ e.endsAt | date: 'h:mm a' }}
+        </p>
+        <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+        <p class="event-desc">{{ e.description }}</p>
+
+        @if (e.registrationFees) {
+          <details class="info-collapse">
+            <summary><mat-icon class="inline-icon">payments</mat-icon> Registration fees</summary>
+            <p class="fees-text">{{ e.registrationFees }}</p>
+          </details>
+        }
+
+        @if (e.schedule.length > 0) {
+          <details class="info-collapse">
+            <summary><mat-icon class="inline-icon">event_note</mat-icon> Schedule of activities</summary>
+            <div class="schedule-table-wrap">
+              <table class="schedule-table">
+                <thead>
+                  <tr><th>Day</th><th>Time</th><th>Activity</th></tr>
+                </thead>
+                <tbody>
+                  @for (row of e.schedule; track $index) {
+                    <tr>
+                      <td>{{ row.day || '—' }}</td>
+                      <td>{{ row.time || '—' }}</td>
+                      <td>{{ row.activity }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </details>
+        }
+
+        @if (e.meals.length > 0) {
+          <details class="info-collapse">
+            <summary><mat-icon class="inline-icon">restaurant</mat-icon> Meal stubs</summary>
+            @for (d of mealDaysOf(e); track d.day) {
+              <p class="fees-text">
+                <strong>Day {{ d.day }}</strong> — ₱{{ d.total | number: '1.2-2' }} per member
+                @for (st of d.stubs; track st.id) {
+                  <span class="meal-chip">
+                    <span class="meal-swatch" [style.background]="st.color || '#5f6368'"></span>
+                    {{ st.name }} ×{{ st.quantity }}
+                  </span>
+                }
+              </p>
+            }
+          </details>
+        }
+
+        <hr class="divider" />
+
+        @if (done()) {
+          <!-- Success: registration received, pending admin confirmation -->
+          <div class="success-block">
+            <mat-icon color="primary" class="big-check">{{ queuedOffline() ? 'cloud_done' : 'hourglass_top' }}</mat-icon>
+            <h2>{{ queuedOffline() ? 'Saved on this device' : 'Registration received!' }}</h2>
+            <p class="muted">
+              Thanks, {{ attendeeName() }}.
+              @if (createdCount() > 0 && !queuedOffline()) {
+                You registered for {{ createdCount() }} sub-event{{ createdCount() === 1 ? '' : 's' }}.
+              }
+              @if (queuedOffline()) {
+                You're offline, so your registration is saved here and will be submitted
+                automatically once this device reconnects.
+              } @else {
+                Your registration is pending confirmation.
+              }
+            </p>
+
+            @if (!queuedOffline()) {
+              <p class="top-gap">
+                @if (deliveryChannel() === 'Both') {
+                  <mat-icon class="inline-icon">forward_to_inbox</mat-icon>
+                  Once an organizer confirms it, we'll send your entry pass (QR code) to both your email and Viber.
+                } @else if (deliveryChannel() === 'Viber') {
+                  <mat-icon class="inline-icon">chat</mat-icon>
+                  Once an organizer confirms it, we'll send your entry pass (QR code) to your Viber.
+                } @else if (hasEmail()) {
+                  <mat-icon class="inline-icon">mark_email_read</mat-icon>
+                  Once an organizer confirms it, we'll email your entry pass (QR code) to you.
+                } @else {
+                  <mat-icon class="inline-icon">info</mat-icon>
+                  An organizer will review and confirm your registration shortly.
+                }
+              </p>
+            }
+
+            @if (editToken() && hasFormFields()) {
+              <a mat-stroked-button class="top-gap" [routerLink]="['/r', editToken()]">
+                <mat-icon>edit</mat-icon> Edit your response
+              </a>
+            }
+
+            @if (isAccount()) {
+              <a mat-button routerLink="/my-events" class="top-gap">Go to My Events</a>
+            }
+          </div>
+        } @else if (blockedReason(); as reason) {
+          <!-- Registration unavailable: event closed or full -->
+          <div class="success-block">
+            <mat-icon class="big-check blocked-icon">event_busy</mat-icon>
+            <h2>Registration unavailable</h2>
+            <p class="muted">{{ reason }}</p>
+          </div>
+        } @else if (auth.isLoggedIn()) {
+          <!-- Registered/logged-in user: identity is read-only, auto-filled from the account -->
+          <p class="muted">You're registering with your account details:</p>
+
+          @if (auth.firstName() || auth.lastName()) {
+            <!-- Account has separate name parts: show each in its own field -->
+            <div class="name-row">
+              <mat-form-field appearance="outline" class="nr-first">
+                <mat-label>First name</mat-label>
+                <input matInput [value]="auth.firstName()" readonly />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="nr-mi">
+                <mat-label>M.I.</mat-label>
+                <input matInput [value]="auth.middleInitial() || '—'" readonly />
+              </mat-form-field>
+            </div>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Last name</mat-label>
+              <input matInput [value]="auth.lastName()" readonly />
+            </mat-form-field>
+          } @else {
+            <!-- Older account without name parts: show the composed name -->
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Name</mat-label>
+              <input matInput [value]="auth.fullName()" readonly />
+              <mat-icon matSuffix>person</mat-icon>
+            </mat-form-field>
+          }
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Senate No.</mat-label>
+            <input matInput [value]="auth.senateNo() || '—'" readonly />
+            <mat-icon matSuffix>badge</mat-icon>
+          </mat-form-field>
+
+          @if (hasSessions()) {
+            <h3 class="form-heading">Choose sub-events</h3>
+            <p class="muted no-account-note">Each sub-event is confirmed and passed separately.</p>
+            @for (grp of sessionDays(); track grp.day) {
+              <div class="session-day">
+                <p class="session-day-label">{{ grp.sessions[0].startsAt | date: 'EEEE, MMMM d, y' }}</p>
+                @for (s of grp.sessions; track s.id) {
+                  <label class="session-pick">
+                    <mat-checkbox
+                      [checked]="isSessionSelected(s.id)"
+                      [disabled]="s.isFull && !isSessionSelected(s.id)"
+                      (change)="toggleSession(s.id)">
+                      {{ s.title }}
+                    </mat-checkbox>
+                    <span class="muted session-pick-meta">
+                      {{ s.startsAt | date: 'h:mm a' }}–{{ s.endsAt | date: 'h:mm a' }}
+                      @if (s.venue) { · {{ s.venue }} }
+                      @if (s.isFull) { · Full }
+                      @if (hasMeals(s)) {
+                        · <mat-icon class="inline-icon">restaurant</mat-icon> Meal stubs ₱{{ mealTotal(s) | number: '1.2-2' }}
+                      }
+                    </span>
+                  </label>
+                }
+              </div>
+            }
+          }
+
+          <app-dynamic-fields #dynAcc [fields]="e.formFields"></app-dynamic-fields>
+
+          <button
+            mat-flat-button
+            color="primary"
+            class="full-width"
+            (click)="registerAsUser(dynAcc)"
+            [disabled]="registering() || !dynAcc.isValid()"
+          >
+            <mat-icon>how_to_reg</mat-icon> Register for this event
+          </button>
+        } @else {
+          <!-- Anonymous visitor: guest pass, no account created -->
+          <h3 class="form-heading">Register to attend</h3>
+          <p class="muted no-account-note">No account needed — just your details.</p>
+
+          @if (!offline.online()) {
+            <p class="offline-note">
+              <mat-icon class="inline-icon">wifi_off</mat-icon>
+              You're offline. Your registration will be saved on this device and submitted when you reconnect.
+            </p>
+          }
+
+          <form #gf="ngForm">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Full name</mat-label>
+            <input matInput name="fullName" [(ngModel)]="fullName" #gName="ngModel"
+                   required minlength="2" maxlength="200" />
+            <mat-icon matSuffix>person</mat-icon>
+            @if (gName.hasError('required')) { <mat-error>Please enter your name.</mat-error> }
+            @if (gName.hasError('minlength')) { <mat-error>Name must be at least 2 characters.</mat-error> }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Senate No.</mat-label>
+            <input matInput name="senateNo" [(ngModel)]="senateNo" #gSenate="ngModel"
+                   required maxlength="50" />
+            <mat-icon matSuffix>badge</mat-icon>
+            @if (gSenate.hasError('required')) { <mat-error>Please enter your Senate No.</mat-error> }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Send my pass via</mat-label>
+            <mat-select name="notificationChannel" [(ngModel)]="notificationChannel">
+              <mat-option value="Email">Email</mat-option>
+              <mat-option value="Viber">Viber</mat-option>
+              <mat-option value="Both">Both (Email &amp; Viber)</mat-option>
+            </mat-select>
+            <mat-icon matSuffix>{{ notificationChannel === 'Email' ? 'mail' : 'chat' }}</mat-icon>
+          </mat-form-field>
+          <p class="muted no-account-note">
+            Once an organizer confirms your registration, your entry pass is sent to your chosen channel.
+            Both your email and mobile number are required.
+          </p>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Email</mat-label>
+            <input matInput type="email" name="email" [(ngModel)]="email" #gEmail="ngModel"
+                   email required maxlength="256" />
+            <mat-icon matSuffix>mail</mat-icon>
+            @if (gEmail.hasError('required')) {
+              <mat-error>An email address is required.</mat-error>
+            } @else if (gEmail.hasError('email')) {
+              <mat-error>Enter a valid email address.</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Mobile number</mat-label>
+            <input matInput name="phone" [(ngModel)]="phone" #gPhone="ngModel"
+                   (input)="onPhoneInput($event)" inputmode="tel" maxlength="16"
+                   placeholder="+63 9XX XXX XXXX" pattern="\+63 9\d{2} \d{3} \d{4}" required />
+            <mat-icon matSuffix>call</mat-icon>
+            @if (gPhone.hasError('required')) {
+              <mat-error>A mobile number is required.</mat-error>
+            } @else if (gPhone.hasError('pattern')) {
+              <mat-error>Enter a valid PH mobile number: +63 9XX XXX XXXX.</mat-error>
+            }
+          </mat-form-field>
+          </form>
+
+          @if (hasSessions()) {
+            <h3 class="form-heading">Choose sub-events</h3>
+            <p class="muted no-account-note">Each sub-event is confirmed and passed separately.</p>
+            @for (grp of sessionDays(); track grp.day) {
+              <div class="session-day">
+                <p class="session-day-label">{{ grp.sessions[0].startsAt | date: 'EEEE, MMMM d, y' }}</p>
+                @for (s of grp.sessions; track s.id) {
+                  <label class="session-pick">
+                    <mat-checkbox
+                      [checked]="isSessionSelected(s.id)"
+                      [disabled]="s.isFull && !isSessionSelected(s.id)"
+                      (change)="toggleSession(s.id)">
+                      {{ s.title }}
+                    </mat-checkbox>
+                    <span class="muted session-pick-meta">
+                      {{ s.startsAt | date: 'h:mm a' }}–{{ s.endsAt | date: 'h:mm a' }}
+                      @if (s.venue) { · {{ s.venue }} }
+                      @if (s.isFull) { · Full }
+                      @if (hasMeals(s)) {
+                        · <mat-icon class="inline-icon">restaurant</mat-icon> Meal stubs ₱{{ mealTotal(s) | number: '1.2-2' }}
+                      }
+                    </span>
+                  </label>
+                }
+              </div>
+            }
+          }
+
+          <app-dynamic-fields #dynGuest [fields]="e.formFields"></app-dynamic-fields>
+
+          <!-- Display picture: shown to staff on the check-in screen to confirm identity -->
+          <div class="face-optin">
+            <p class="face-optin-title">
+              <mat-icon class="inline-icon">account_circle</mat-icon> Display picture
+              <span class="muted">(optional)</span>
+            </p>
+            <p class="muted face-optin-hint">
+              Upload a clear photo of your face. It appears on the organizer's screen when you
+              check in, so staff can confirm it's you. A head-and-shoulders photo works best.
+            </p>
+            <div class="dp-row">
+              <div class="dp-preview" [class.has-image]="displayPicture()">
+                @if (displayPicture()) {
+                  <img [src]="displayPicture()" alt="Your display picture preview" />
+                } @else {
+                  <mat-icon>person</mat-icon>
+                }
+              </div>
+              <div class="dp-actions">
+                <button type="button" mat-stroked-button (click)="dpInput.click()">
+                  <mat-icon>upload</mat-icon>
+                  {{ displayPicture() ? 'Change photo' : 'Upload photo' }}
+                </button>
+                @if (displayPicture()) {
+                  <button type="button" mat-button (click)="removeDisplayPicture()">Remove</button>
+                }
+                <input #dpInput type="file" accept="image/*" hidden
+                       (change)="onDisplayPictureSelected($event)" />
+                @if (displayPictureError()) {
+                  <p class="error-text">{{ displayPictureError() }}</p>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Optional facial registration for faster check-in -->
+          <div class="face-optin">
+            <p class="face-optin-title">
+              <mat-icon class="inline-icon">face</mat-icon> Face check-in <span class="muted">(optional)</span>
+            </p>
+            <p class="muted face-optin-hint">
+              Add your face now to check in without a QR code at the event.
+            </p>
+            <mat-checkbox name="faceConsent" [(ngModel)]="faceConsent">
+              I consent to capturing my facial data and its use for check-in at this event.
+            </mat-checkbox>
+            <div class="face-optin-actions">
+              <button type="button" mat-stroked-button (click)="captureFace()" [disabled]="!faceConsent">
+                <mat-icon>photo_camera</mat-icon>
+                {{ capturedFace() ? 'Retake face' : 'Add my face' }}
+              </button>
+              @if (capturedFace()) {
+                <span class="face-ok"><mat-icon class="inline-icon">verified_user</mat-icon> Face added</span>
+                <button type="button" mat-button (click)="removeFace()">Remove</button>
+              }
+            </div>
+          </div>
+
+          <button
+            mat-flat-button
+            color="primary"
+            class="full-width"
+            (click)="registerAsGuest(dynGuest)"
+            [disabled]="registering() || gf.invalid || !fullName.trim() || !senateNo.trim() || !guestContactValid() || !dynGuest.isValid()"
+          >
+            <mat-icon>how_to_reg</mat-icon> Register to attend
+          </button>
+
+          <p class="muted fine-print">
+            Have an account? <a href="javascript:void(0)" (click)="goSignIn()">Sign in</a>
+            to auto-fill and track this in <em>My Events</em>.
+          </p>
+
+          <!-- Recovery (B): resend the edit link to an existing registrant -->
+          @if (hasFormFields()) {
+            <hr class="divider" />
+            @if (editLinkSent()) {
+              <p class="muted fine-print">
+                <mat-icon class="inline-icon">mark_email_read</mat-icon>
+                If a matching registration was found, we've sent the edit link — check your email or Viber.
+              </p>
+            } @else if (!showEditLookup()) {
+              <p class="muted fine-print">
+                Already registered?
+                <a href="javascript:void(0)" (click)="showEditLookup.set(true)">Edit your response</a>.
+              </p>
+            } @else {
+              <p class="muted no-account-note">
+                Enter your Senate No. and the name you registered with to open your response right away.
+              </p>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Senate No.</mat-label>
+                <input matInput name="editSenateNo" [(ngModel)]="editSenateNo"
+                       (keyup.enter)="goToEditBySenate()" autocomplete="off" />
+                <mat-icon matSuffix>badge</mat-icon>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Registered name</mat-label>
+                <input matInput name="editName" [(ngModel)]="editName"
+                       (keyup.enter)="goToEditBySenate()" autocomplete="off" />
+                <mat-icon matSuffix>person</mat-icon>
+              </mat-form-field>
+              <button mat-flat-button color="primary" class="full-width" (click)="goToEditBySenate()"
+                      [disabled]="editResolving() || !editSenateNo.trim() || !editName.trim()">
+                <mat-icon>edit</mat-icon> Open my response
+              </button>
+
+              <div class="or-divider"><span>or</span></div>
+
+              <p class="muted no-account-note">
+                Prefer a link? Enter the email or mobile number you registered with and we'll send your edit link.
+              </p>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Email or mobile number</mat-label>
+                <input matInput name="editContact" [(ngModel)]="editContact"
+                       (keyup.enter)="sendEditLink()" autocomplete="off" />
+                <mat-icon matSuffix>alternate_email</mat-icon>
+              </mat-form-field>
+              <button mat-stroked-button class="full-width" (click)="sendEditLink()"
+                      [disabled]="editLinkSending() || !editContact.trim()">
+                <mat-icon>send</mat-icon> Send my edit link
+              </button>
+            }
+          }
+        }
+      </mat-card-content>
+    }
+  </mat-card>
+</div>
