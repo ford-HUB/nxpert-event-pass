@@ -23,9 +23,13 @@ const HEADER_MAP: Record<string, keyof UserImportRow> = {
   username: 'username',
   user: 'username',
   login: 'username',
+  idno: 'senateNo',
+  id: 'senateNo',
+  idnumber: 'senateNo',
   senateno: 'senateNo',
   senate: 'senateNo',
   senatenumber: 'senateNo',
+  designation: 'level',
   level: 'level',
   membership: 'level',
   membershiplevel: 'level',
@@ -46,7 +50,7 @@ const HEADER_MAP: Record<string, keyof UserImportRow> = {
 };
 
 const TEMPLATE_HEADERS =
-  'First Name,Middle Initial,Last Name,Email,Username,Senate No,Level,Organization,Phone,Role,Notification Channel';
+  'First Name,Middle Initial,Last Name,Email,Username,ID No,Designation,Organization,Phone,Role,Notification Channel';
 const TEMPLATE_SAMPLE =
   'Juan,D,Dela Cruz,juan.delacruz@example.com,,12345,Senator,Acme Corp,+639171234567,Participant,Email';
 

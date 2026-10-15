@@ -36,20 +36,16 @@
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Senate No.</mat-label>
+          <mat-label>ID No.</mat-label>
           <input matInput name="senateNo" [(ngModel)]="senateNo" #senateCtrl="ngModel"
                  required maxlength="50" />
-          @if (senateCtrl.hasError('required')) { <mat-error>Senate No. is required.</mat-error> }
+          @if (senateCtrl.hasError('required')) { <mat-error>ID No. is required.</mat-error> }
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Level</mat-label>
-          <mat-select name="level" [(ngModel)]="level" #levelCtrl="ngModel" required>
-            @for (opt of levelOptions; track opt) {
-              <mat-option [value]="opt">{{ opt }}</mat-option>
-            }
-          </mat-select>
-          @if (levelCtrl.hasError('required')) { <mat-error>Level is required.</mat-error> }
+          <mat-label>Designation</mat-label>
+          <input matInput name="level" [(ngModel)]="level" #levelCtrl="ngModel" required maxlength="100" />
+          @if (levelCtrl.hasError('required')) { <mat-error>Designation is required.</mat-error> }
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">

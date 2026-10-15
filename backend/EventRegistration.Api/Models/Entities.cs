@@ -19,6 +19,23 @@ public static class Permissions
     public const string ConfirmRegistrationsPolicy = "CanConfirmRegistrations";
 }
 
+// How an event is attended. Online / Hybrid events carry a meeting link and send calendar invites.
+public static class EventFormats
+{
+    public const string InPerson = "InPerson";
+    public const string Online = "Online";
+    public const string Hybrid = "Hybrid";
+
+    public static string Normalize(string? f) =>
+        f == Online || f == Hybrid ? f : InPerson;
+
+    // Has an online component (meeting link + calendar invite).
+    public static bool HasOnline(string? f) => f == Online || f == Hybrid;
+
+    // Has a physical venue (QR entry pass + check-in).
+    public static bool HasVenue(string? f) => f != Online;
+}
+
 public static class EventStatus
 {
     public const string Draft = "Draft";
@@ -118,6 +135,13 @@ public class Event
     public string? ScheduleJson { get; set; }
     // When true, notify each registrant (email/Viber) when their event kit is marked claimed.
     public bool NotifyOnKitClaim { get; set; } = false;
+    // How attendees take part: in person (default), online, or hybrid. See EventFormats.
+    [MaxLength(10)] public string Format { get; set; } = EventFormats.InPerson;
+    // Online meeting join link (e.g. a Teams meeting URL) for Online / Hybrid events.
+    [MaxLength(1000)] public string? MeetingUrl { get; set; }
+    // Calendar-invite revision (iCalendar SEQUENCE). Bumped whenever an online event's time,
+    // title or link changes, so re-sent invites replace the earlier calendar entry.
+    public int InviteSequence { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public ICollection<Invitation> Invitations { get; set; } = new List<Invitation>();
@@ -143,6 +167,8 @@ public class Session
     [MaxLength(300)] public string? Venue { get; set; }
     // Max participants for this session. null = unlimited.
     public int? Capacity { get; set; }
+    // Optional online meeting link for this sub-event; falls back to the event's MeetingUrl.
+    [MaxLength(1000)] public string? MeetingUrl { get; set; }
     // Optional poster/image for this sub-event, stored as a data URL. Shown to participants
     // in Browse Events and My Events.
     public string? PosterImage { get; set; }

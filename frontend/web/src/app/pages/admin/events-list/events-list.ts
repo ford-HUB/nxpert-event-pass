@@ -1,7 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -16,7 +15,6 @@ import { EventDto } from '../../../core/models';
   imports: [
     DatePipe,
     RouterLink,
-    MatCardModule,
     MatButtonModule,
     MatIconModule,
     MatTooltipModule,
@@ -40,6 +38,16 @@ export class EventsListComponent implements OnInit {
       },
       error: () => this.loading.set(false),
     });
+  }
+
+  // Keyboard open for the card (Enter on the card itself, not on its inner button).
+  open(e: EventDto, ev: Event): void {
+    if (ev.target === ev.currentTarget) this.router.navigate(['/admin/events', e.id]);
+  }
+
+  // Progress-bar width (0–100) for a count against its total.
+  fill(count: number, total: number): number {
+    return total > 0 ? Math.min(100, Math.round((count / total) * 100)) : 0;
   }
 
   // Launch the check-in scanner for an event — but only within the event's date window.

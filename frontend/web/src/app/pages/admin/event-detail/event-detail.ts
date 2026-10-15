@@ -21,6 +21,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { ApiService } from '../../../core/api.service';
 import { AuthService } from '../../../core/auth.service';
 import { ToastService } from '../../../core/toast.service';
+import { ConfirmService } from '../../../core/confirm.service';
 import { AttendeeDto, ContactDto, EventDto, EventFeedbackSummary, MealBoardDto, MealBoardRow, MealStubDetailDto } from '../../../core/models';
 import { ImageViewerDialogComponent } from '../../../shared/image-viewer/image-viewer-dialog';
 import { KitClaimDialogComponent, KitClaimResult } from '../../../shared/kit-claim-dialog';
@@ -57,6 +58,7 @@ export class EventDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private toast = inject(ToastService);
+  private confirmer = inject(ConfirmService);
   private dialog = inject(MatDialog);
 
   // Open an uploaded image-field answer in a full-size viewer dialog.
@@ -83,6 +85,7 @@ export class EventDetailComponent implements OnInit {
   selectedAttendees = signal<Set<number>>(new Set());
   confirming = signal(false);
   checkingIn = signal(false);
+  cancelling = signal(false);
 
   // Kit claiming: its own selection + filters, independent of the attendance tab.
   selectedKits = signal<Set<number>>(new Set());
@@ -330,6 +333,45 @@ export class EventDetailComponent implements OnInit {
       error: (err) => {
         this.confirming.set(false);
         this.toast.error(err?.error?.message ?? 'Could not confirm registrations.');
+      },
+    });
+  }
+
+  // Cancel (remove) the selected registrations — pending ones only. Confirmed / checked-in rows in
+  // the selection are left alone (the server enforces the same rule).
+  async cancelSelected(): Promise<void> {
+    const pending = this.pendingAttendees().filter((a) => this.selectedAttendees().has(a.registrationId));
+    if (pending.length === 0) {
+      this.toast.warning('Only pending registrations can be cancelled.');
+      return;
+    }
+    const skipped = this.selectedAttendeeCount() - pending.length;
+    const who = pending.length === 1 ? pending[0].fullName : `${pending.length} pending registrations`;
+    const ok = await this.confirmer.confirm({
+      title: pending.length === 1 ? 'Cancel registration?' : `Cancel ${pending.length} registrations?`,
+      message:
+        `${who} will be removed from this event. This cannot be undone.` +
+        (skipped > 0 ? ` ${skipped} confirmed or checked-in selection${skipped === 1 ? '' : 's'} will be kept.` : ''),
+      confirmText: pending.length === 1 ? 'Cancel registration' : `Cancel ${pending.length}`,
+      cancelText: 'Keep',
+      tone: 'error',
+      icon: 'event_busy',
+    });
+    if (!ok) return;
+
+    this.cancelling.set(true);
+    this.api.cancelRegistrations(this.id, pending.map((a) => a.registrationId)).subscribe({
+      next: (res) => {
+        this.cancelling.set(false);
+        this.selectedAttendees.set(new Set());
+        const parts = [`Cancelled ${res.cancelled} registration${res.cancelled === 1 ? '' : 's'}`];
+        if (res.notPending) parts.push(`${res.notPending} not pending — kept`);
+        this.toast.success(parts.join(' · ') + '.');
+        this.reload();
+      },
+      error: (err) => {
+        this.cancelling.set(false);
+        this.toast.error(err?.error?.message ?? 'Could not cancel registrations.');
       },
     });
   }
@@ -1061,8 +1103,14 @@ export class EventDetailComponent implements OnInit {
     });
   }
 
-  deleteEvent(): void {
-    if (!confirm('Delete this event and all its registrations? This cannot be undone.')) return;
+  async deleteEvent(): Promise<void> {
+    const ok = await this.confirmer.confirm({
+      title: 'Delete event?',
+      message: 'This event and all of its registrations will be permanently removed. This cannot be undone.',
+      confirmText: 'Delete event',
+      tone: 'error',
+    });
+    if (!ok) return;
     this.api.deleteEvent(this.id).subscribe(() => {
       this.toast.success('Event deleted.');
       this.router.navigate(['/admin/events']);

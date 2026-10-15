@@ -17,6 +17,62 @@ html {
       density: 0,
     )
   );
+
+  // Brand system colours: teal primary + neutral white surfaces (Material's green palette
+  // tints every surface cream). Everything Material draws — buttons, fields, checkboxes,
+  // toggles, tabs, spinners, icons with color="primary" — picks these up.
+  @include mat.theme-overrides(
+    (
+      primary: #0d9488,
+      on-primary: #ffffff,
+      primary-container: #ccf2ec,
+      on-primary-container: #064e46,
+      secondary-container: #e6f6f3,
+      on-secondary-container: #0f766e,
+      tertiary: #16a34a,
+      error: #dc2626,
+      surface: #ffffff,
+      surface-bright: #ffffff,
+      surface-container-lowest: #ffffff,
+      surface-container-low: #f8fbfa,
+      surface-container: #ffffff,
+      surface-container-high: #f1f6f4,
+      surface-container-highest: #e8efec,
+      on-surface: #0f172a,
+      on-surface-variant: #475569,
+      outline: #94a3b8,
+      outline-variant: #e2e8f0,
+    )
+  );
+
+  // Component shapes shared app-wide: pill buttons, rounded fields/dialogs/menus.
+  @include mat.button-overrides(
+    (
+      filled-container-shape: 999px,
+      outlined-container-shape: 999px,
+      protected-container-shape: 999px,
+      text-container-shape: 999px,
+      tonal-container-shape: 999px,
+      outlined-outline-color: #cbd5e1,
+    )
+  );
+  @include mat.form-field-overrides(
+    (
+      outlined-container-shape: 12px,
+    )
+  );
+  @include mat.dialog-overrides(
+    (
+      container-shape: 20px,
+      container-color: #ffffff,
+    )
+  );
+  @include mat.menu-overrides(
+    (
+      container-shape: 12px,
+      container-color: #ffffff,
+    )
+  );
 }
 
 // ---- Design tokens (brand, surfaces, elevation) ----
@@ -49,36 +105,177 @@ body {
   box-sizing: border-box;
 }
 
-// ---- Cards: soft, rounded, hairline-bordered, layered shadow ----
+// =====================================================================
+// App-wide component look (matches Home, User Master, Login, event cards)
+// =====================================================================
+
+// ---- Cards: white, rounded, faint teal hairline, layered shadow ----
 .mat-mdc-card {
-  border-radius: var(--card-radius) !important;
-  border: var(--hairline);
+  border-radius: 18px !important;
+  border: 1px solid rgba(13, 148, 136, 0.14);
   box-shadow: var(--card-shadow) !important;
-  background: var(--mat-sys-surface);
+  background: #fff !important;
 }
 
-// ---- Buttons: crisp modern radius ----
-.mat-mdc-raised-button,
-.mat-mdc-flat-button,
-.mat-mdc-outlined-button,
-.mat-mdc-unelevated-button,
-.mat-mdc-button {
-  border-radius: 10px !important;
-  letter-spacing: 0.1px;
+.mat-mdc-card-title {
+  color: #0f172a;
 }
 
+// ---- Buttons: pill shape (via button-overrides above) + brand fills ----
+.mat-mdc-button-base {
+  letter-spacing: 0.2px;
+  font-weight: 700 !important;
+}
+
+// Filled buttons wear the brand gradient; warn-coloured ones go solid red.
+.mat-mdc-unelevated-button:not(:disabled):not(.mat-warn) {
+  background-image: linear-gradient(135deg, #0d9488 0%, #22b07d 100%);
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.26);
+  transition: box-shadow 0.15s ease, filter 0.15s ease;
+
+  &:hover {
+    filter: brightness(0.95);
+    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.34);
+  }
+}
+
+.mat-mdc-unelevated-button.mat-warn:not(:disabled) {
+  background: #dc2626 !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.24);
+}
+
+// Outlined buttons: slate outline that turns teal on hover.
+.mat-mdc-outlined-button:not(:disabled) {
+  border-width: 1.5px !important;
+  color: #334155 !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    border-color: #0d9488 !important;
+    color: #0d9488 !important;
+    background: #f3fbf8;
+  }
+  &.mat-primary {
+    color: #0f766e !important;
+  }
+  &.mat-warn {
+    color: #dc2626 !important;
+    &:hover { border-color: #dc2626 !important; background: #fdecec; }
+  }
+}
+
+// Text buttons: brand teal.
+.mat-mdc-button:not(:disabled):not(.mat-warn) {
+  color: #0f766e;
+}
+
+// ---- Page titles: soft icon tile + bold heading ----
 .page-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 20px;
+  gap: 12px;
+  margin: 0 0 22px;
+
+  > mat-icon {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+    border-radius: 13px;
+    font-size: 24px;
+    line-height: 24px;
+    box-sizing: border-box;
+    background: #ecf8f4;
+    color: #0d9488 !important;
+  }
 }
 
 .page-title h1 {
   margin: 0;
-  font: var(--mat-sys-headline-small);
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.4px;
+  line-height: 1.2;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+// ---- Tables: soft header band, hover rows (same as User Master grid) ----
+.mat-mdc-table {
+  background: #fff !important;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.mat-mdc-header-row {
+  background: #f6faf8;
+}
+
+.mat-mdc-header-cell {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px;
+  color: #475569 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+.mat-mdc-cell {
+  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+.mat-mdc-row:hover {
+  background: #f8fcfa;
+}
+
+.table-wrap {
+  border: 1px solid rgba(13, 148, 136, 0.14);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.mat-mdc-paginator {
+  background: transparent !important;
+}
+
+// ---- Tabs: bold labels, teal active state ----
+.mat-mdc-tab .mdc-tab__text-label {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.mat-mdc-tab-header {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+// ---- Dialogs: bold title, roomy actions ----
+.mat-mdc-dialog-surface {
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18) !important;
+}
+
+.mat-mdc-dialog-title {
+  font-weight: 800 !important;
+  letter-spacing: -0.2px !important;
+  color: #0f172a !important;
+}
+
+.mat-mdc-dialog-actions {
+  gap: 8px;
+  padding: 12px 24px 20px !important;
+}
+
+// ---- Menus ----
+.mat-mdc-menu-panel {
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14) !important;
+}
+
+// ---- Chips / progress ----
+.mat-mdc-progress-bar {
+  --mat-progress-bar-active-indicator-color: #0d9488;
 }
 
 .toolbar-row {
@@ -107,23 +304,6 @@ body {
   gap: 18px;
 }
 
-/* Start-scan button overlaid on an event card (admin events list) */
-.event-card-item {
-  position: relative;
-}
-
-.start-scan-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-}
-
-/* Keep the title from running under the Start button */
-.event-card-item .mat-mdc-card-header {
-  padding-right: 108px;
-}
-
 .mat-mdc-card-title {
   font-weight: 700 !important;
   letter-spacing: -0.2px;
@@ -133,25 +313,34 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 10px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  background: #eef2f6;
+  color: #475569;
 }
 
+// Same palette as the event-card .ev-tag chips.
 .status-pill.ok {
-  background: #e6f4ea;
-  color: #137333;
+  background: #e8f7ee;
+  color: #15803d;
 }
 
 .status-pill.pending {
-  background: #fef7e0;
-  color: #b06000;
+  background: #fef4e2;
+  color: #b45309;
 }
 
 .status-pill.closed {
-  background: #fce8e6;
-  color: #c5221f;
+  background: #fdecec;
+  color: #b91c1c;
+}
+
+.status-pill.brand,
+.status-pill.registered {
+  background: #e6f6f3;
+  color: #0f766e;
 }
 
 // Small tag showing how a check-in was recorded (Scan / Face / Manual), shown next to the pill.
@@ -168,8 +357,8 @@ body {
 }
 
 .method-tag.manual {
-  background: #e8f0fe;
-  color: #1967d2;
+  background: #e6f6f3;
+  color: #0f766e;
 }
 
 // "(self)" marker next to a self-claimed kit's claimer name in the kit-claiming grid.
@@ -177,7 +366,7 @@ body {
   margin-left: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #1967d2;
+  color: #0f766e;
 }
 
 .badge-row {
@@ -193,34 +382,71 @@ body {
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Empty-state icon sits in a soft teal circle, like the Home icon tiles.
 .empty-state mat-icon {
-  font-size: 48px;
-  width: 48px;
-  height: 48px;
-  opacity: 0.5;
+  box-sizing: content-box;
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 18px;
+  border-radius: 50%;
+  background: #ecf8f4;
+  color: #0d9488;
 }
 
+// Auth-style pages (login, sign-up, verify, public registration, edit response):
+// same glow backdrop as the login screen.
 .auth-shell {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  // Branded backdrop with a soft glow behind the card.
+  padding: 32px 20px;
   background:
-    radial-gradient(900px 500px at 50% -8%, rgba(13, 148, 136, 0.16), transparent 60%),
-    radial-gradient(700px 500px at 100% 100%, rgba(34, 197, 94, 0.1), transparent 55%),
+    radial-gradient(900px 520px at 0% 0%, rgba(13, 148, 136, 0.18), transparent 60%),
+    radial-gradient(800px 520px at 100% 100%, rgba(125, 211, 106, 0.18), transparent 55%),
     var(--app-bg);
 }
 
+// Floating white card with the brand gradient strip across the top.
 .auth-card {
+  position: relative;
   width: 100%;
-  max-width: 430px;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+  max-width: 460px;
+  border: none !important;
+  border-radius: 24px !important;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14), 0 4px 14px rgba(15, 23, 42, 0.06) !important;
+
+  &::before {
+    content: '';
+    display: block;
+    height: 6px;
+    background: linear-gradient(90deg, #0d9488 0%, #3dbb8a 55%, #7dd36a 100%);
+  }
+
+  .mat-mdc-card-header {
+    padding: 24px 24px 4px;
+  }
+  .mat-mdc-card-content {
+    padding: 8px 24px 24px;
+  }
+  // Primary action inside auth cards: full pill height like the login button.
+  .mat-mdc-unelevated-button.full-width {
+    height: 48px;
+    font-size: 15px;
+  }
 }
 
-.auth-card .mat-mdc-card-content {
-  padding: 8px 24px 24px;
+// The event banner already carries the gradient, so skip the strip there.
+.auth-card.event-card::before {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .auth-shell {
+    padding: 16px 12px;
+    align-items: flex-start;
+  }
 }
 
 .error-text {
@@ -761,6 +987,9 @@ mat-card-actions {
 .event-desc {
   margin: 16px 0;
   line-height: 1.5;
+  // Keep the organizer's line breaks, blank lines and indentation exactly as typed.
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .divider {
@@ -1325,7 +1554,7 @@ mat-card-actions {
   margin-left: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #1967d2;
+  color: #0f766e;
 }
 
 .builder-empty {
@@ -1465,7 +1694,7 @@ mat-card-actions {
   gap: 6px;
 }
 
-.metric-icon {
+.metric-card .metric-icon {
   font-size: 22px;
   width: 44px;
   height: 44px;
@@ -1490,8 +1719,8 @@ mat-card-actions {
   font-weight: 500;
 }
 
-.metric-card.accent {
-  background: var(--brand-grad);
+.mat-mdc-card.metric-card.accent {
+  background: var(--brand-grad) !important;
   color: #fff;
   border: none;
 }
@@ -1597,41 +1826,232 @@ mat-card-actions {
   font-size: 12px;
 }
 
-/* ===== Toasts (ToastService) ===== */
-/* Colour every toast by type via the MDC snack-bar tokens, set on the
-   panelClass container. success = green, error = red, warning = amber,
-   info = brand blue. A left accent bar reinforces the type at a glance. */
-.app-toast {
-  --mdc-snackbar-container-color: #1f2733;
-  --mdc-snackbar-supporting-text-color: #fff;
-  --mat-snack-bar-button-color: #fff;
+/* ===== Alerts: toasts (ToastService) + confirm dialog (ConfirmService) =====
+   Both share one card language: white surface, tone-coloured icon badge, bold
+   title, muted message. Tones: success = green, error = red, warning = amber,
+   info = brand teal. */
+.tone-success { --tone: #16a34a; --tone-soft: #e8f7ee; }
+.tone-error   { --tone: #dc2626; --tone-soft: #fdecec; }
+.tone-warning { --tone: #d97706; --tone-soft: #fef4e2; }
+.tone-info    { --tone: #0d9488; --tone-soft: #e6f6f3; }
 
-  .mdc-snackbar__surface {
-    border-radius: 12px !important;
-    box-shadow: 0 6px 24px rgba(15, 23, 42, 0.22) !important;
-    border-left: 5px solid rgba(255, 255, 255, 0.55);
+// Strip MatSnackBar's own dark surface so only our card shows.
+.app-toast-panel {
+  --mat-snack-bar-container-color: transparent;
+  --mdc-snackbar-container-color: transparent;
+  margin: 16px !important;
+
+  .mdc-snackbar__surface,
+  .mat-mdc-snackbar-surface {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
-  .mdc-snackbar__label {
-    font-weight: 600;
-    letter-spacing: 0.1px;
+  .mdc-snackbar__label,
+  .mat-mdc-snack-bar-label {
+    padding: 0 !important;
   }
 }
 
-.app-toast-success {
-  --mdc-snackbar-container-color: #1e8e3e;
-  .mdc-snackbar__surface { border-left-color: #0b5c26; }
+.alert-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px 12px 16px 14px;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-left: 4px solid var(--tone);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+  animation: alert-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
-.app-toast-error {
-  --mdc-snackbar-container-color: #c5221f;
-  .mdc-snackbar__surface { border-left-color: #7f1210; }
+
+.alert-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--tone-soft);
+  color: var(--tone);
+
+  mat-icon {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
 }
-.app-toast-warning {
-  --mdc-snackbar-container-color: #b06000;
-  .mdc-snackbar__surface { border-left-color: #6e3c00; }
+
+.alert-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
 }
-.app-toast-info {
-  --mdc-snackbar-container-color: #1967d2;
-  .mdc-snackbar__surface { border-left-color: #0e3f85; }
+
+.alert-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.alert-msg {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.alert-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -2px -2px 0 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+
+  &:hover {
+    background: #f1f5f9;
+    color: #334155;
+  }
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+// Countdown bar along the bottom; pauses while hovered.
+.alert-timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--tone);
+  opacity: 0.55;
+  transform-origin: left;
+  animation-name: alert-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+
+  &.paused {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes alert-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes alert-countdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+// ---- Confirm dialog ----
+.app-confirm-panel .mat-mdc-dialog-surface {
+  --mat-dialog-container-color: #fff;
+  background: #fff !important;
+  border-radius: 20px !important;
+  overflow: hidden;
+}
+
+.confirm-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 26px 22px;
+  border-top: 4px solid var(--tone);
+  animation: alert-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: var(--tone-soft);
+  color: var(--tone);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--tone-soft) 55%, transparent);
+
+  mat-icon {
+    font-size: 34px;
+    width: 34px;
+    height: 34px;
+  }
+}
+
+.confirm-title {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: #0f172a;
+}
+
+.confirm-msg {
+  margin: 0 0 22px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.confirm-btn {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+
+  &.ghost {
+    border: 1.5px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+
+    &:hover { background: #f8fafc; }
+  }
+
+  &.solid {
+    border: none;
+    background: var(--tone);
+    color: #fff;
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--tone) 35%, transparent);
+
+    &:hover { filter: brightness(0.93); }
+  }
+
+  &:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--tone) 40%, transparent);
+    outline-offset: 2px;
+  }
 }
 
 /* ===== Mobile refinements (participant & shared) ===== */
@@ -1657,5 +2077,525 @@ mat-card-actions {
   .mat-mdc-card-content {
     padding-left: 16px;
     padding-right: 16px;
+  }
+}
+
+/* ===== Event cards (admin Events, Browse Events, My Events) =====
+   Same language as the Home module cards: white surface, gradient outline,
+   soft teal tiles, pill buttons. */
+.ev-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+
+.ev-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 2px solid transparent;
+  border-radius: 18px;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    var(--brand-grad) border-box;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &.is-link {
+    cursor: pointer;
+  }
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--card-shadow-hover);
+  }
+  &:focus-visible {
+    outline: 3px solid rgba(13, 148, 136, 0.45);
+    outline-offset: 3px;
+  }
+}
+
+// Banner / poster strip at the top of a card.
+.ev-media {
+  position: relative;
+  height: 170px;
+  flex: none;
+  background: var(--brand-grad);
+  overflow: hidden;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  // Placeholder when there's no image: big soft icon on the gradient.
+  &.placeholder {
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.85);
+
+    > mat-icon {
+      font-size: 56px;
+      width: 56px;
+      height: 56px;
+    }
+  }
+
+  .ev-date {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+  }
+}
+
+.ev-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 14px;
+  min-width: 0;
+}
+
+.ev-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+// Calendar tile: month over day.
+.ev-date {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 60px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  line-height: 1;
+
+  .m {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #0d9488;
+  }
+  .d {
+    margin-top: 4px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+}
+
+.ev-head .ev-date {
+  background: #ecf8f4;
+  border-color: transparent;
+}
+
+.ev-heading .ev-tags {
+  margin-top: 6px;
+}
+
+.ev-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ev-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.ev-session {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0d9488;
+}
+
+.ev-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ev-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  color: #475569;
+  min-width: 0;
+
+  mat-icon {
+    flex: none;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: #0d9488;
+  }
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.ev-blurb {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #64748b;
+  white-space: pre-line; // line breaks as typed (2-line preview)
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// Status chips.
+.ev-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ev-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #eef2f6;
+  color: #475569;
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+  }
+
+  &.ok { background: #e8f7ee; color: #15803d; }
+  &.warn { background: #fef4e2; color: #b45309; }
+  &.bad { background: #fdecec; color: #b91c1c; }
+  &.brand { background: #e6f6f3; color: #0f766e; }
+}
+
+// Chips overlaid on the media strip.
+.ev-media .ev-tags {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  justify-content: flex-end;
+
+  .ev-tag {
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  }
+}
+
+// Stat tiles (admin).
+.ev-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ev-stat {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6faf8;
+  border: 1px solid rgba(13, 148, 136, 0.1);
+
+  .num {
+    display: block;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: #0f172a;
+  }
+  .cap {
+    font-size: 13px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+  .lbl {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+  }
+}
+
+.ev-bar {
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--brand-grad);
+  }
+}
+
+// Footer actions.
+.ev-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.ev-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: #0d9488;
+    color: #0d9488;
+    background: #f3fbf8;
+  }
+
+  &.solid {
+    border: none;
+    background: linear-gradient(135deg, #0d9488 0%, #22b07d 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.28);
+
+    // Keep the gradient: the generic .ev-btn hover would swap in a pale tint behind white text.
+    &:hover:not(:disabled) {
+      color: #fff;
+      background: linear-gradient(135deg, #0b8076 0%, #1c9a6c 100%);
+      box-shadow: 0 6px 16px rgba(13, 148, 136, 0.36);
+    }
+  }
+
+  &.done {
+    border-color: rgba(21, 128, 61, 0.35);
+    color: #15803d;
+    background: #f0faf4;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(13, 148, 136, 0.35);
+    outline-offset: 2px;
+  }
+}
+
+// Round arrow chip, as on the Home cards.
+.ev-go {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--brand-grad);
+  color: #fff;
+  opacity: 0.85;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.ev-card:hover .ev-go {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.ev-more {
+  margin-left: auto;
+  color: #64748b;
+}
+
+@media (max-width: 600px) {
+  .ev-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .ev-media {
+    height: 150px;
+  }
+}
+
+/* ===== Entry forms: centred and wider on desktop =====
+   Page forms (New/Edit event, My account, Settings) are centred as one column with their page
+   title; auth-style forms (Sign up, event registration, edit response) get a wider card.
+   Phones/tablets keep the existing full-width layouts. */
+:root {
+  --form-page-width: 880px;
+  --auth-form-width: 640px;
+}
+
+@media (min-width: 900px) {
+  .form-card,
+  .account-card,
+  .settings-body {
+    width: 100%;
+    max-width: var(--form-page-width) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .settings-body .settings-card {
+    max-width: none;
+  }
+
+  // Page title (and the toolbar row wrapping it) lines up with the centred form.
+  .app-content:has(.form-card, .account-card, .settings-body) {
+    .page-title,
+    .toolbar-row:has(> .page-title) {
+      width: 100%;
+      max-width: var(--form-page-width);
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
+
+  // Roomier inner padding now that the card is wider.
+  .form-card > .mat-mdc-card-content,
+  .account-card > .mat-mdc-card-content,
+  .settings-card > .mat-mdc-card-content {
+    padding: 28px 36px 32px !important;
+  }
+
+  // Auth-style cards that contain a form (not the plain verify message).
+  .auth-card:has(form) {
+    max-width: var(--auth-form-width);
+  }
+
+  .auth-card:has(form) {
+    .mat-mdc-card-header {
+      padding: 28px 36px 4px;
+    }
+    .mat-mdc-card-content {
+      padding: 12px 36px 32px;
+    }
+  }
+}
+
+/* ===== Event form: format selector + online meeting link ===== */
+.format-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+
+.format-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.format-toggle {
+  border-radius: 999px !important;
+  overflow: hidden;
+
+  .mat-button-toggle-label-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+  .mat-button-toggle-label-content mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.field-prefix {
+  margin: 0 4px 0 10px;
+  color: #0d9488;
+}
+
+.hint-error {
+  color: var(--mat-sys-error);
+}
+
+.online-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 2px 0 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  background: #e6f6f3;
+  color: #0f5f57;
+
+  mat-icon {
+    flex: none;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: #0d9488;
+  }
+
+  &.warn {
+    background: #fef4e2;
+    color: #8a4b07;
+
+    mat-icon { color: #d97706; }
   }
 }

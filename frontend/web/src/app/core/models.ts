@@ -306,6 +306,9 @@ export interface MealUpsert {
   validTo: string | null;
 }
 
+// How an event is attended. Online / Hybrid events carry a meeting link + calendar invite.
+export type EventFormat = 'InPerson' | 'Online' | 'Hybrid';
+
 export interface SessionDto {
   id: number;
   title: string;
@@ -319,6 +322,7 @@ export interface SessionDto {
   isFull: boolean;
   posterImage: string | null;
   meals: MealDto[];
+  meetingUrl?: string | null; // admin responses only
 }
 
 export interface SessionUpsert {
@@ -331,6 +335,7 @@ export interface SessionUpsert {
   capacity: number | null;
   posterImage: string | null;
   meals: MealUpsert[];
+  meetingUrl: string | null; // optional per-sub-event link (falls back to the event link)
 }
 
 export interface EventDto {
@@ -355,6 +360,8 @@ export interface EventDto {
   schedule: ScheduleItem[];
   notifyOnKitClaim: boolean;
   meals: MealDto[]; // event-level (per-day) meal stubs (no-sub-event events)
+  format: EventFormat;
+  meetingUrl?: string | null; // admin responses only — never sent to public / browse callers
 }
 
 export interface EventUpsert {
@@ -374,6 +381,8 @@ export interface EventUpsert {
   schedule: ScheduleItem[];
   notifyOnKitClaim: boolean;
   meals: MealUpsert[]; // event-level (per-day) meal stubs
+  format: EventFormat;
+  meetingUrl: string | null;
 }
 
 export interface RegistrationDto {
@@ -390,6 +399,8 @@ export interface RegistrationDto {
   sessionTitle: string | null;
   sessionPosterImage: string | null;
   hasFormFields: boolean;
+  format: EventFormat;
+  meetingUrl: string | null; // join link, only once the registration is confirmed
 }
 
 export interface RegistrationFormDto {
@@ -455,6 +466,11 @@ export interface AttendeeDto {
   mealCount: number;
   mealsRedeemedAt: string | null;
   mealsRedeemedBy: string | null;
+}
+
+export interface CancelRegistrationsResult {
+  cancelled: number;
+  notPending: number;
 }
 
 export interface ConfirmResult {

@@ -1,7 +1,7 @@
-@if (sending() || confirming()) {
+@if (sending() || confirming() || cancelling()) {
   <div class="loading-overlay">
     <mat-spinner diameter="52"></mat-spinner>
-    <p>{{ confirming() ? 'Confirming registrations…' : 'Sending invitations…' }}</p>
+    <p>{{ confirming() ? 'Confirming registrations…' : cancelling() ? 'Cancelling registrations…' : 'Sending invitations…' }}</p>
   </div>
 }
 
@@ -52,7 +52,20 @@
     </div>
     <p class="detail-row"><mat-icon class="inline-icon">schedule</mat-icon>
       {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'h:mm a' }}</p>
-    <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+    @if (e.format !== 'Online') {
+      <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+    }
+    @if (e.format === 'Online' || e.format === 'Hybrid') {
+      <p class="detail-row">
+        <mat-icon class="inline-icon">videocam</mat-icon>
+        @if (e.meetingUrl) {
+          <a [href]="e.meetingUrl" target="_blank" rel="noopener">Online meeting link</a>
+          <span class="muted">· sent with each confirmation, plus a calendar invite</span>
+        } @else {
+          <span class="muted">Online — no meeting link yet. Add it in Edit so confirmations include it.</span>
+        }
+      </p>
+    }
     <div class="stat-row">
       <div class="stat">
         <span class="stat-num">{{ e.registeredCount }}{{ e.capacity ? '/' + e.capacity : '' }}</span>
@@ -204,6 +217,17 @@
             <mat-icon>fact_check</mat-icon>
             Check in selected@if (selectedCheckInCount() > 0) { ({{ selectedCheckInCount() }}) }
           </button>
+          <!-- Cancel applies to pending rows only; confirmed / checked-in rows in the selection are skipped. -->
+          <button
+            mat-stroked-button
+            color="warn"
+            (click)="cancelSelected()"
+            [disabled]="cancelling() || selectedPendingCount() === 0"
+            matTooltip="Only pending registrations can be cancelled"
+          >
+            <mat-icon>event_busy</mat-icon>
+            Cancel selected@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
+          </button>
           <button mat-stroked-button (click)="exportCsv()" [disabled]="attendees().length === 0">
             <mat-icon>download</mat-icon> Export CSV
           </button>
@@ -249,7 +273,7 @@
                 <td mat-cell *matCellDef="let a">{{ a.fullName }}</td>
               </ng-container>
               <ng-container matColumnDef="senate">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Senate No.</th>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>ID No.</th>
                 <td mat-cell *matCellDef="let a">{{ a.senateNo || '—' }}</td>
               </ng-container>
               <ng-container matColumnDef="phone">
@@ -409,7 +433,7 @@
                 <td mat-cell *matCellDef="let a">{{ a.fullName }}</td>
               </ng-container>
               <ng-container matColumnDef="senate">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Senate No.</th>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>ID No.</th>
                 <td mat-cell *matCellDef="let a">{{ a.senateNo || '—' }}</td>
               </ng-container>
               <ng-container matColumnDef="phone">

@@ -6,6 +6,9 @@ namespace EventRegistration.Api.Services;
 // How a confirmation pass was delivered (or that there was no contact to send it to).
 public enum PassDelivery { NotSent, Email, Viber, Both }
 
+// Why an online meeting invite is being withdrawn.
+public enum MeetingCancelReason { RegistrationCancelled, EventCancelled, NowInPerson }
+
 /// <summary>
 /// Issues entry passes. The pass (a QR of the registration token) is only ever sent once a
 /// registration has been confirmed by an admin, so this is the single place that builds the QR
@@ -54,8 +57,14 @@ public class PassService
         var name = reg.DisplayName;
         var qrPng = _qr.GeneratePng($"REG:{reg.Token}");
 
+        // Online / hybrid: meeting link + calendar invite. Online-only events have no door, so no
+        // QR pass or meal stubs — the join link is the "pass".
+        var showPass = EventFormats.HasVenue(ev.Format);
+        var meetingUrl = EventFormats.HasOnline(ev.Format) ? CalendarInvite.MeetingUrlFor(ev, reg.Session) : null;
+        var invite = CalendarInvite.For(ev, reg, _email.FromName, _email.FromAddress);
+
         // Generate (once) and deliver the registrant's individual meal stubs alongside the pass.
-        var stubs = await _mealStubs.EnsureStubsAsync(reg);
+        var stubs = showPass ? await _mealStubs.EnsureStubsAsync(reg) : new List<MealStub>();
 
         // A stub's validity label, from its explicit date range (e.g. "VALID ON OCTOBER 09, 2026"
         // or "VALID SEP 11 – 13, 2026").
@@ -71,7 +80,17 @@ public class PassService
         // Viber, when preferred (Viber or Both) and a phone is on file.
         if (NotificationChannels.UsesViber(channel) && !string.IsNullOrWhiteSpace(phone))
         {
-            await _mobile.SendPassAsync(phone!, title, startsAt, venue, name, reg.Token.ToString(), qrPng, editUrl);
+            if (showPass)
+                await _mobile.SendPassAsync(phone!, title, startsAt, venue, name, reg.Token.ToString(), qrPng, editUrl);
+            if (meetingUrl is not null)
+            {
+                var text = showPass
+                    ? $"You can also join \"{title}\" online: {meetingUrl}"
+                    : $"Hi {name}, your registration for \"{title}\" is confirmed. " +
+                      $"When: {startsAt:ddd, MMM d yyyy, h:mm tt}. Join online: {meetingUrl}" +
+                      (editUrl is null ? "" : $" · Edit your response: {editUrl}");
+                await _mobile.SendTextAsync(phone!, $"Registration confirmed — {title}", text);
+            }
             if (stubs.Count > 0)
             {
                 var items = stubs
@@ -92,8 +111,9 @@ public class PassService
         {
             // Pass QR + one fully-composed image per meal stub (banner, QR, MEAL STUB, validity,
             // vertical denomination — all baked into a single PNG so it renders identically anywhere).
-            var images = new Dictionary<string, byte[]> { ["qrcode"] = qrPng };
-            var html = new StringBuilder(EmailTemplates.Confirmation(title, startsAt, venue, name, editUrl));
+            var images = showPass ? new Dictionary<string, byte[]> { ["qrcode"] = qrPng } : new();
+            var html = new StringBuilder(
+                EmailTemplates.Confirmation(title, startsAt, venue, name, editUrl, meetingUrl, showPass));
             if (stubs.Count > 0)
             {
                 html.Append(
@@ -111,8 +131,14 @@ public class PassService
                         $"<img src=\"cid:{cid}\" alt=\"Meal stub\" width=\"400\" style=\"max-width:100%;display:block;margin:0 auto\" /></div>");
                 }
             }
-            await _email.SendAsync(email!, $"Registration confirmed — your pass for {title}",
-                html.ToString(), inlineImages: images);
+            var attachments = invite is null
+                ? null
+                : new[] { new EmailAttachment(CalendarInvite.FileName, CalendarInvite.Request(invite), CalendarInvite.ContentType(false)) };
+            var subject = showPass
+                ? $"Registration confirmed — your pass for {title}"
+                : $"Registration confirmed — online meeting for {title}";
+            await _email.SendAsync(email!, subject, html.ToString(),
+                inlineImages: images, attachments: attachments);
             sentEmail = true;
         }
 
@@ -120,6 +146,54 @@ public class PassService
         reg.PassEmailSentAt = DateTime.Now;
         return sentViber && sentEmail ? PassDelivery.Both
             : sentViber ? PassDelivery.Viber : PassDelivery.Email;
+    }
+
+    /// <summary>
+    /// Online meeting changed (time / title / link): sends the registrant an updated calendar
+    /// invite (same UID, higher SEQUENCE) plus the new link over Viber when that's their channel.
+    /// Only for confirmed registrations (they're the ones who received an invite). Requires
+    /// <c>reg.User</c> and <c>reg.Session</c> to be loaded.
+    /// </summary>
+    public async Task SendMeetingUpdateAsync(Event ev, Registration reg)
+    {
+        var invite = CalendarInvite.For(ev, reg, _email.FromName, _email.FromAddress);
+        var url = CalendarInvite.MeetingUrlFor(ev, reg.Session);
+        if (url is null) return;
+        var title = reg.Session is not null ? $"{ev.Title} — {reg.Session.Title}" : ev.Title;
+        var startsAt = reg.Session?.StartsAt ?? ev.StartsAt;
+        var subject = $"Updated: online meeting for {title}";
+
+        var channel = reg.User?.NotificationChannel ?? reg.GuestNotificationChannel ?? NotificationChannels.Email;
+        if (NotificationChannels.UsesViber(channel) && !string.IsNullOrWhiteSpace(reg.DisplayPhone))
+            await _mobile.SendTextAsync(reg.DisplayPhone!, subject,
+                $"Hi {reg.DisplayName}, the online meeting for \"{title}\" has changed. " +
+                $"When: {startsAt:ddd, MMM d yyyy, h:mm tt}. Join: {url}");
+
+        if (invite is not null && (NotificationChannels.UsesEmail(channel) || string.IsNullOrWhiteSpace(reg.DisplayPhone)))
+            await _email.SendAsync(invite.AttendeeEmail, subject,
+                EmailTemplates.MeetingUpdated(title, startsAt, reg.DisplayName, url),
+                attachments: new[] { new EmailAttachment(CalendarInvite.FileName, CalendarInvite.Request(invite), CalendarInvite.ContentType(false)) });
+    }
+
+    /// <summary>
+    /// Removes the online meeting from the registrant's calendar (CANCEL invite) — sent when a
+    /// confirmed registration is cancelled or the whole event is deleted. No-op for in-person
+    /// events or registrations that never received an invite. Requires <c>reg.Session</c> loaded.
+    /// </summary>
+    public async Task SendMeetingCancelAsync(Event ev, Registration reg, MeetingCancelReason reason)
+    {
+        if (reg.PassEmailSentAt is null) return; // never received an invite
+        var invite = CalendarInvite.For(ev, reg, _email.FromName, _email.FromAddress);
+        if (invite is null) return;
+        var subject = reason switch
+        {
+            MeetingCancelReason.EventCancelled => $"Cancelled: {invite.Title}",
+            MeetingCancelReason.NowInPerson => $"Online meeting removed — {invite.Title}",
+            _ => $"Registration cancelled — {invite.Title}",
+        };
+        await _email.SendAsync(invite.AttendeeEmail, subject,
+            EmailTemplates.MeetingCancelled(invite.Title, invite.StartsAt, reg.DisplayName, reason),
+            attachments: new[] { new EmailAttachment(CalendarInvite.FileName, CalendarInvite.Cancel(invite), CalendarInvite.ContentType(true)) });
     }
 
     /// <summary>

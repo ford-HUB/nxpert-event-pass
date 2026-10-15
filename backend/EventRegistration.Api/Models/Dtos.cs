@@ -124,7 +124,8 @@ public record EventUpsertRequest(
     string Venue, bool IsPublicLinkEnabled, string Status, int? Capacity,
     List<FormFieldDef>? FormFields, string? BannerImage, string? WelcomeMessage,
     List<SessionUpsertRequest>? Sessions, string? RegistrationFees, List<ScheduleItem>? Schedule,
-    bool NotifyOnKitClaim = false, List<MealUpsertRequest>? Meals = null);
+    bool NotifyOnKitClaim = false, List<MealUpsertRequest>? Meals = null,
+    string? Format = null, string? MeetingUrl = null);
 
 public record EventDto(
     int Id, string Title, string Description, DateTime StartsAt, DateTime EndsAt,
@@ -132,7 +133,10 @@ public record EventDto(
     int RegisteredCount, int CheckedInCount, int? Capacity, bool IsFull,
     List<FormFieldDef> FormFields, string? BannerImage, string? WelcomeMessage,
     List<SessionDto> Sessions, string? RegistrationFees, List<ScheduleItem> Schedule,
-    bool NotifyOnKitClaim, List<MealDto> Meals);
+    bool NotifyOnKitClaim, List<MealDto> Meals,
+    // Format: InPerson / Online / Hybrid. MeetingUrl is only filled for admin responses — public
+    // and browse responses never expose the join link (confirmed registrants get it via My Events).
+    string Format = EventFormats.InPerson, string? MeetingUrl = null);
 
 // A row in the event's schedule-of-activities grid.
 public record ScheduleItem(string? Day, string? Time, string Activity);
@@ -147,11 +151,12 @@ public record MealUpsertRequest(int Id, string Name, decimal Denomination, int Q
 // A sub-event (session) within an event.
 public record SessionUpsertRequest(
     int Id, string Title, string? Description, DateTime StartsAt, DateTime EndsAt,
-    string? Venue, int? Capacity, string? PosterImage, List<MealUpsertRequest>? Meals = null);
+    string? Venue, int? Capacity, string? PosterImage, List<MealUpsertRequest>? Meals = null,
+    string? MeetingUrl = null);
 public record SessionDto(
     int Id, string Title, string? Description, DateTime StartsAt, DateTime EndsAt,
     string? Venue, int? Capacity, int RegisteredCount, int CheckedInCount, bool IsFull,
-    string? PosterImage, List<MealDto> Meals);
+    string? PosterImage, List<MealDto> Meals, string? MeetingUrl = null);
 
 public record InviteRequest(List<string> Emails);
 
@@ -173,7 +178,9 @@ public record RegisterResult(int Created, int AlreadyRegistered, string EventTit
 public record RegistrationDto(
     int Id, int EventId, string EventTitle, DateTime StartsAt, string Venue,
     Guid Token, DateTime RegisteredAt, DateTime? ConfirmedAt, DateTime? CheckedInAt,
-    int? SessionId, string? SessionTitle, string? SessionPosterImage, bool HasFormFields);
+    int? SessionId, string? SessionTitle, string? SessionPosterImage, bool HasFormFields,
+    // Online / Hybrid: the join link, only once the registration is confirmed.
+    string Format = EventFormats.InPerson, string? MeetingUrl = null);
 
 // The event's custom registration form + a participant's current answers, for self-service edit.
 public record RegistrationFormDto(
@@ -217,6 +224,10 @@ public record UpdateSettingsRequest(List<string>? CcEmails, string? MobileProvid
 // Bulk confirmation: admin selects registrations and confirms them, which issues the pass.
 public record ConfirmRequest(List<int> RegistrationIds);
 public record ConfirmResult(int Confirmed, int Emailed, int AlreadyConfirmed, int NoEmail);
+
+// Admin bulk cancel: only pending registrations (not confirmed, not checked in) are removed.
+public record CancelRegistrationsRequest(List<int> RegistrationIds);
+public record CancelRegistrationsResult(int Cancelled, int NotPending);
 
 // Manual bulk check-in: admin selects registrations and marks them checked in.
 public record ManualCheckInRequest(List<int> RegistrationIds);

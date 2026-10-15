@@ -13,10 +13,14 @@ public class EventsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ViberService _viber;
-    public EventsController(AppDbContext db, ViberService viber)
+    private readonly PassService _pass;
+    private readonly ILogger<EventsController> _log;
+    public EventsController(AppDbContext db, ViberService viber, PassService pass, ILogger<EventsController> log)
     {
         _db = db;
         _viber = viber;
+        _pass = pass;
+        _log = log;
     }
 
     private record Counts(int Total, int CheckedIn);
@@ -46,8 +50,10 @@ public class EventsController : ControllerBase
 
     // includeBanner is false for list/dashboard responses so those stay light — the banner
     // (a base64 data URL) is only sent for single-event detail/public/upsert responses.
+    // includeMeeting: admin responses only — the join link never goes to public / browse callers.
     private static EventDto ToDto(Event e, bool includeBanner,
-        IReadOnlyDictionary<int, Counts> evCounts, IReadOnlyDictionary<int, Counts> sesCounts)
+        IReadOnlyDictionary<int, Counts> evCounts, IReadOnlyDictionary<int, Counts> sesCounts,
+        bool includeMeeting = false)
     {
         var ec = evCounts.TryGetValue(e.Id, out var c) ? c : new Counts(0, 0);
         var sessions = e.Sessions
@@ -60,7 +66,8 @@ public class EventsController : ControllerBase
                     sc.Total, sc.CheckedIn, s.Capacity.HasValue && sc.Total >= s.Capacity.Value,
                     includeBanner ? s.PosterImage : null,
                     e.Meals.Where(m => m.SessionId == s.Id)
-                        .OrderBy(m => m.SortOrder).ThenBy(m => m.Id).Select(ToMealDto).ToList());
+                        .OrderBy(m => m.SortOrder).ThenBy(m => m.Id).Select(ToMealDto).ToList(),
+                    includeMeeting ? s.MeetingUrl : null);
             })
             .ToList();
 
@@ -81,7 +88,9 @@ public class EventsController : ControllerBase
             e.RegistrationFees,
             FormJson.ReadSchedule(e.ScheduleJson),
             e.NotifyOnKitClaim,
-            eventMeals);
+            eventMeals,
+            EventFormats.Normalize(e.Format),
+            includeMeeting ? e.MeetingUrl : null);
     }
 
     private static MealDto ToMealDto(Meal m) =>
@@ -93,7 +102,7 @@ public class EventsController : ControllerBase
     private sealed record EvtLite(int Id, string Title, string Description, DateTime StartsAt,
         DateTime EndsAt, string Venue, bool IsPublicLinkEnabled, string PublicSlug, string Status,
         int? Capacity, string? FormSchema, string? WelcomeMessage, string? RegistrationFees,
-        string? ScheduleJson, bool NotifyOnKitClaim, List<SesLite> Sessions);
+        string? ScheduleJson, bool NotifyOnKitClaim, List<SesLite> Sessions, string Format);
 
     private static EventDto BuildLite(EvtLite e,
         IReadOnlyDictionary<int, Counts> evCounts, IReadOnlyDictionary<int, Counts> sesCounts)
@@ -114,8 +123,25 @@ public class EventsController : ControllerBase
             e.Capacity.HasValue && ec.Total >= e.Capacity.Value,
             FormJson.ReadSchema(e.FormSchema), null, e.WelcomeMessage, sessions,
             e.RegistrationFees, FormJson.ReadSchedule(e.ScheduleJson), e.NotifyOnKitClaim,
-            new List<MealDto>());
+            new List<MealDto>(), EventFormats.Normalize(e.Format));
     }
+
+    // Meeting links must be http(s) URLs when given.
+    private static string? ValidateMeetingLinks(EventUpsertRequest req)
+    {
+        if (!string.IsNullOrWhiteSpace(req.MeetingUrl) && !CalendarInvite.IsValidUrl(req.MeetingUrl))
+            return "The meeting link must be a full web address (starting with https://).";
+        foreach (var s in req.Sessions ?? new())
+            if (!string.IsNullOrWhiteSpace(s.MeetingUrl) && !CalendarInvite.IsValidUrl(s.MeetingUrl))
+                return $"The meeting link for sub-event '{s.Title}' must be a full web address (starting with https://).";
+        return null;
+    }
+
+    private static string? CleanUrl(string? url) => string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+
+    // Online-only events have no physical venue; keep the column meaningful for lists/exports.
+    private static string VenueFor(string format, string? venue) =>
+        string.IsNullOrWhiteSpace(venue) && format == EventFormats.Online ? "Online" : (venue ?? "").Trim();
 
     // Images (banner / sub-event poster) must be an image data URL within a sane size cap.
     private static string? ValidateImage(string? value, string label)
@@ -149,6 +175,7 @@ public class EventsController : ControllerBase
         Venue = string.IsNullOrWhiteSpace(s.Venue) ? null : s.Venue.Trim(),
         Capacity = s.Capacity is > 0 ? s.Capacity : null,
         PosterImage = string.IsNullOrEmpty(s.PosterImage) ? null : s.PosterImage,
+        MeetingUrl = CleanUrl(s.MeetingUrl),
     };
 
     // Builds a Meal. session set → sub-event stub; session null → event-level (per-day) stub.
@@ -253,6 +280,7 @@ public class EventsController : ControllerBase
                 es.Venue = string.IsNullOrWhiteSpace(s.Venue) ? null : s.Venue.Trim();
                 es.Capacity = s.Capacity is > 0 ? s.Capacity : null;
                 es.PosterImage = string.IsNullOrEmpty(s.PosterImage) ? null : s.PosterImage;
+                es.MeetingUrl = CleanUrl(s.MeetingUrl);
                 map[s] = es;
                 keep.Add(s.Id);
             }
@@ -288,7 +316,8 @@ public class EventsController : ControllerBase
                 e.ScheduleJson, e.NotifyOnKitClaim,
                 e.Sessions.OrderBy(s => s.StartsAt)
                     .Select(s => new SesLite(s.Id, s.Title, s.Description, s.StartsAt, s.EndsAt, s.Venue, s.Capacity))
-                    .ToList()))
+                    .ToList(),
+                e.Format))
             .ToListAsync();
         var (ev, ses) = await LoadCountsAsync();
         return Ok(events.Select(e => BuildLite(e, ev, ses)));
@@ -381,7 +410,7 @@ public class EventsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id);
         if (e is null) return NotFound();
         var (ev, ses) = await LoadCountsAsync(id);
-        return Ok(ToDto(e, includeBanner: true, ev, ses));
+        return Ok(ToDto(e, includeBanner: true, ev, ses, includeMeeting: true));
     }
 
     // ---- Public: event by slug (the landing page for both invite links and public links) ----
@@ -396,6 +425,7 @@ public class EventsController : ControllerBase
             .FirstOrDefaultAsync(x => x.PublicSlug == slug);
         if (e is null) return NotFound();
         var (ev, ses) = await LoadCountsAsync(e.Id);
+        // Anonymous page: never expose the meeting link (confirmed registrants get it by email / My Events).
         return Ok(ToDto(e, includeBanner: true, ev, ses));
     }
 
@@ -403,16 +433,19 @@ public class EventsController : ControllerBase
     public async Task<ActionResult<EventDto>> Create(EventUpsertRequest req)
     {
         var bannerError = ValidateBanner(req.BannerImage) ?? ValidateSessionPosters(req.Sessions)
-            ?? ValidateMeals(req);
+            ?? ValidateMeals(req) ?? ValidateMeetingLinks(req);
         if (bannerError is not null) return BadRequest(new { message = bannerError });
 
+        var format = EventFormats.Normalize(req.Format);
         var e = new Event
         {
             Title = req.Title.Trim(),
             Description = req.Description,
             StartsAt = req.StartsAt,
             EndsAt = req.EndsAt,
-            Venue = req.Venue,
+            Venue = VenueFor(format, req.Venue),
+            Format = format,
+            MeetingUrl = CleanUrl(req.MeetingUrl),
             IsPublicLinkEnabled = req.IsPublicLinkEnabled,
             Status = string.IsNullOrWhiteSpace(req.Status) ? EventStatus.Published : req.Status,
             Capacity = req.Capacity is > 0 ? req.Capacity : null,
@@ -431,7 +464,7 @@ public class EventsController : ControllerBase
         _db.Events.Add(e);
         await _db.SaveChangesAsync();
         var (ev, ses) = await LoadCountsAsync(e.Id);
-        return Ok(ToDto(e, includeBanner: true, ev, ses));
+        return Ok(ToDto(e, includeBanner: true, ev, ses, includeMeeting: true));
     }
 
     [HttpPut("{id:int}"), Authorize(Roles = Roles.Admin + "," + Roles.SuperAdmin)]
@@ -442,14 +475,20 @@ public class EventsController : ControllerBase
         if (e is null) return NotFound();
 
         var bannerError = ValidateBanner(req.BannerImage) ?? ValidateSessionPosters(req.Sessions)
-            ?? ValidateMeals(req);
+            ?? ValidateMeals(req) ?? ValidateMeetingLinks(req);
         if (bannerError is not null) return BadRequest(new { message = bannerError });
 
+        // Snapshot what a calendar invite is built from, to detect changes worth re-inviting for.
+        var before = InviteSnapshot.Of(e);
+
+        var format = EventFormats.Normalize(req.Format);
         e.Title = req.Title.Trim();
         e.Description = req.Description;
         e.StartsAt = req.StartsAt;
         e.EndsAt = req.EndsAt;
-        e.Venue = req.Venue;
+        e.Venue = VenueFor(format, req.Venue);
+        e.Format = format;
+        e.MeetingUrl = CleanUrl(req.MeetingUrl);
         e.IsPublicLinkEnabled = req.IsPublicLinkEnabled;
         e.Status = req.Status;
         e.Capacity = req.Capacity is > 0 ? req.Capacity : null;
@@ -465,9 +504,82 @@ public class EventsController : ControllerBase
         if (sessionError is not null) return BadRequest(new { message = sessionError });
         RebuildMeals(e, req, sessionMap);
 
+        // Online meeting details changed → bump the invite revision so re-sent invites replace
+        // the calendar entry, then notify confirmed registrants after saving.
+        var changes = before.Diff(e);
+        // Steps of 2: a cancellation uses SEQUENCE+1, so a later re-invite always ranks above it.
+        if (changes.Any) e.InviteSequence += 2;
+
         await _db.SaveChangesAsync();
+        if (changes.Any) await SendInviteChangesAsync(e, before, changes);
+
         var (ev, ses) = await LoadCountsAsync(id);
-        return Ok(ToDto(e, includeBanner: true, ev, ses));
+        return Ok(ToDto(e, includeBanner: true, ev, ses, includeMeeting: true));
+    }
+
+    // What an invite depends on, captured before an update so changes can be detected.
+    private sealed record InviteSnapshot(
+        string Format, string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl,
+        Dictionary<int, (string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl)> Sessions)
+    {
+        public static InviteSnapshot Of(Event e) => new(
+            EventFormats.Normalize(e.Format), e.Title, e.StartsAt, e.EndsAt, e.MeetingUrl,
+            e.Sessions.Where(s => s.Id > 0).ToDictionary(s => s.Id, s => (s.Title, s.StartsAt, s.EndsAt, s.MeetingUrl)));
+
+        public InviteChanges Diff(Event e)
+        {
+            var wasOnline = EventFormats.HasOnline(Format);
+            var isOnline = EventFormats.HasOnline(e.Format);
+            if (!wasOnline && !isOnline) return InviteChanges.None;
+            // Became online / stopped being online / event-wide details changed → everyone.
+            if (wasOnline != isOnline || Title != e.Title || StartsAt != e.StartsAt
+                || EndsAt != e.EndsAt || MeetingUrl != e.MeetingUrl)
+                return new InviteChanges(true, AllRegistrations: true, new HashSet<int>());
+            // Otherwise only registrations of sub-events whose own details changed.
+            var changed = e.Sessions
+                .Where(s => s.Id > 0 && Sessions.TryGetValue(s.Id, out var o)
+                    && (o.Title != s.Title || o.StartsAt != s.StartsAt || o.EndsAt != s.EndsAt || o.MeetingUrl != s.MeetingUrl))
+                .Select(s => s.Id).ToHashSet();
+            return changed.Count > 0 ? new InviteChanges(true, false, changed) : InviteChanges.None;
+        }
+    }
+
+    private sealed record InviteChanges(bool Any, bool AllRegistrations, HashSet<int> SessionIds)
+    {
+        public static readonly InviteChanges None = new(false, false, new HashSet<int>());
+    }
+
+    // Sends updated invites (or cancellations, when the event is no longer online) to confirmed
+    // registrants affected by an update. Delivery failures are logged, never fail the save.
+    private async Task SendInviteChangesAsync(Event e, InviteSnapshot before, InviteChanges changes)
+    {
+        var regs = await _db.Registrations.Include(r => r.User).Include(r => r.Session)
+            .Where(r => r.EventId == e.Id && r.ConfirmedAt != null && r.PassEmailSentAt != null)
+            .ToListAsync();
+        if (!changes.AllRegistrations)
+            regs = regs.Where(r => r.SessionId is int sid && changes.SessionIds.Contains(sid)).ToList();
+
+        var nowOnline = EventFormats.HasOnline(e.Format);
+        // Switched back to in person: cancel the invites that were sent under the old online details.
+        var previous = nowOnline ? null : new Event
+        {
+            Id = e.Id, Title = before.Title, Description = e.Description, StartsAt = before.StartsAt,
+            EndsAt = before.EndsAt, Venue = e.Venue, Format = before.Format,
+            MeetingUrl = before.MeetingUrl, InviteSequence = e.InviteSequence,
+        };
+
+        foreach (var r in regs)
+        {
+            try
+            {
+                if (nowOnline) await _pass.SendMeetingUpdateAsync(e, r);
+                else await _pass.SendMeetingCancelAsync(previous!, r, MeetingCancelReason.NowInPerson);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Could not send meeting update for registration {Id}.", r.Id);
+            }
+        }
     }
 
     // ---- Admin: close / reopen registration ----
@@ -485,7 +597,7 @@ public class EventsController : ControllerBase
         e.Status = status;
         await _db.SaveChangesAsync();
         var (ev, ses) = await LoadCountsAsync(id);
-        return Ok(ToDto(e, includeBanner: true, ev, ses));
+        return Ok(ToDto(e, includeBanner: true, ev, ses, includeMeeting: true));
     }
 
     [HttpDelete("{id:int}"), Authorize(Roles = Roles.Admin + "," + Roles.SuperAdmin)]
@@ -493,8 +605,22 @@ public class EventsController : ControllerBase
     {
         var e = await _db.Events.FindAsync(id);
         if (e is null) return NotFound();
+
+        // Online / hybrid: take the meeting off confirmed registrants' calendars first.
+        var invited = EventFormats.HasOnline(e.Format)
+            ? await _db.Registrations.Include(r => r.User).Include(r => r.Session)
+                .Where(r => r.EventId == id && r.ConfirmedAt != null && r.PassEmailSentAt != null)
+                .ToListAsync()
+            : new List<Registration>();
+
         _db.Events.Remove(e);
         await _db.SaveChangesAsync();
+
+        foreach (var r in invited)
+        {
+            try { await _pass.SendMeetingCancelAsync(e, r, MeetingCancelReason.EventCancelled); }
+            catch (Exception ex) { _log.LogError(ex, "Could not send meeting cancellation for registration {Id}.", r.Id); }
+        }
         return NoContent();
     }
 

@@ -1,6 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -8,6 +7,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ToastService } from '../../core/toast.service';
+import { ConfirmService } from '../../core/confirm.service';
 import { ApiService } from '../../core/api.service';
 import { RegistrationDto } from '../../core/models';
 import { PassDialogComponent } from './pass-dialog';
@@ -19,7 +19,6 @@ import { openImageLightbox } from '../../shared/image-lightbox';
   selector: 'app-my-events',
   imports: [
     DatePipe,
-    MatCardModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -33,6 +32,7 @@ export class MyEventsComponent implements OnInit {
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
   private toast = inject(ToastService);
+  private confirmer = inject(ConfirmService);
 
   viewImage(src: string | null | undefined): void {
     openImageLightbox(this.dialog, src);
@@ -82,8 +82,16 @@ export class MyEventsComponent implements OnInit {
     });
   }
 
-  cancel(reg: RegistrationDto): void {
-    if (!confirm(`Cancel your registration for "${reg.eventTitle}"?`)) return;
+  async cancel(reg: RegistrationDto): Promise<void> {
+    const ok = await this.confirmer.confirm({
+      title: 'Cancel registration?',
+      message: `Your registration for "${reg.eventTitle}" will be cancelled and your pass will no longer work.`,
+      confirmText: 'Cancel registration',
+      cancelText: 'Keep it',
+      tone: 'error',
+      icon: 'event_busy',
+    });
+    if (!ok) return;
     this.api.cancelRegistration(reg.id).subscribe({
       next: () => {
         this.toast.success('Registration cancelled.');

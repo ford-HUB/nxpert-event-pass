@@ -5,6 +5,12 @@
   <a mat-stroked-button [routerLink]="['/admin/events', eventId]">
     <mat-icon>arrow_back</mat-icon> Back
   </a>
+  <button mat-stroked-button (click)="beeper.toggleMute()"
+          [attr.aria-pressed]="!beeper.muted()"
+          [attr.aria-label]="beeper.muted() ? 'Turn scan beep on' : 'Turn scan beep off'">
+    <mat-icon>{{ beeper.muted() ? 'volume_off' : 'volume_up' }}</mat-icon>
+    {{ beeper.muted() ? 'Sound off' : 'Sound on' }}
+  </button>
   <button mat-stroked-button (click)="toggleTv()">
     <mat-icon>{{ tvMode() ? 'fullscreen_exit' : 'tv' }}</mat-icon>
     {{ tvMode() ? 'Exit TV mode' : 'TV mode' }}
@@ -19,7 +25,7 @@
   </div>
 }
 
-<div class="scanner-layout">
+<div class="scanner-layout" [class.cam-lg]="camSize() === 'lg' && !tvMode() && mode() !== 'barcode'">
   <div class="scanner-col">
     <mat-button-toggle-group class="mode-toggle" [value]="scanAction()"
         (change)="setAction($event.value)" aria-label="Scan action">
@@ -73,6 +79,19 @@
       }
     </div>
 
+    <!-- Camera preview size (not used by the barcode input) -->
+    @if (mode() !== 'barcode') {
+      <div class="size-row">
+        <span class="size-label"><mat-icon class="inline-icon">aspect_ratio</mat-icon> Preview size</span>
+        <mat-button-toggle-group class="size-toggle" [value]="camSize()" (change)="setCamSize($event.value)"
+                                 aria-label="Camera preview size">
+          @for (s of camSizes; track s.value) {
+            <mat-button-toggle [value]="s.value">{{ s.label }}</mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </div>
+    }
+
     @if (mode() === 'camera' || mode() === 'auto') {
       @if (mode() === 'auto') {
         <p class="muted meal-mode-note">
@@ -80,12 +99,14 @@
           Auto mode: show a QR pass or a registered face — a QR code always takes priority.
         </p>
       }
-      <div class="cam-block" [class.tv-pip]="tvMode()">
+      <div class="cam-block" [class.tv-pip]="tvMode()" [class.mirrored]="qrFacing() === 'user'"
+           [class.size-sm]="camSize() === 'sm'" [class.size-lg]="camSize() === 'lg'">
         <div id="qr-reader" class="qr-reader"></div>
         @if (tvMode() && scanning()) {
           <div class="cam-pip-label">
             <mat-icon class="inline-icon">{{ mode() === 'auto' ? 'auto_awesome' : 'videocam' }}</mat-icon>
             {{ mode() === 'auto' ? 'QR + Face' : 'Camera preview' }}
+            <ng-container *ngTemplateOutlet="pipSize" />
           </div>
         }
       </div>
@@ -109,6 +130,13 @@
           }
         } @else if (!starting()) {
           <button mat-flat-button color="primary" (click)="start()"><mat-icon>play_arrow</mat-icon> Start scanning</button>
+        }
+        @if (canSwitchCamera() && (scanning() || switchingCamera())) {
+          <button mat-stroked-button (click)="switchCamera()" [disabled]="switchingCamera()"
+                  [attr.aria-label]="'Switch to ' + (qrFacing() === 'user' ? 'back' : 'front') + ' camera'">
+            <mat-icon>cameraswitch</mat-icon>
+            {{ qrFacing() === 'user' ? 'Back camera' : 'Front camera' }}
+          </button>
         }
         <span class="spacer"></span>
         <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
@@ -135,10 +163,14 @@
       </div>
     } @else {
       <!-- Facial recognition -->
-      <div class="cam-block" [class.tv-pip]="tvMode()">
+      <div class="cam-block" [class.tv-pip]="tvMode()" [class.mirrored]="faceFacing() === 'user'"
+           [class.size-sm]="camSize() === 'sm'" [class.size-lg]="camSize() === 'lg'">
         <video #faceVideo autoplay playsinline muted class="qr-reader"></video>
         @if (tvMode() && faceReady()) {
-          <div class="cam-pip-label"><mat-icon class="inline-icon">face</mat-icon> Face preview</div>
+          <div class="cam-pip-label">
+            <mat-icon class="inline-icon">face</mat-icon> Face preview
+            <ng-container *ngTemplateOutlet="pipSize" />
+          </div>
         }
       </div>
 
@@ -157,6 +189,13 @@
           <span class="muted scan-live"><mat-spinner diameter="18"></mat-spinner> Loading face models…</span>
         } @else if (faceReady()) {
           <span class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Watching for faces…</span>
+        }
+        @if (canSwitchCamera() && (faceReady() || switchingCamera())) {
+          <button mat-stroked-button (click)="switchCamera()" [disabled]="switchingCamera()"
+                  [attr.aria-label]="'Switch to ' + (faceFacing() === 'user' ? 'back' : 'front') + ' camera'">
+            <mat-icon>cameraswitch</mat-icon>
+            {{ faceFacing() === 'user' ? 'Back camera' : 'Front camera' }}
+          </button>
         }
         <span class="spacer"></span>
         <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
@@ -178,7 +217,7 @@
         @if (resultLevel() || resultSenateNo() || resultOrganization()) {
           <p class="banner-meta">
             @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
-            @if (resultSenateNo()) { <span class="meta-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultSenateNo()) { <span class="meta-chip">ID No. {{ resultSenateNo() }}</span> }
             @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
           </p>
         }
@@ -287,7 +326,7 @@
         @if (resultLevel() || resultSenateNo() || resultOrganization()) {
           <div class="tv-meta">
             @if (resultLevel()) { <span class="tv-chip">{{ resultLevel() }}</span> }
-            @if (resultSenateNo()) { <span class="tv-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultSenateNo()) { <span class="tv-chip">ID No. {{ resultSenateNo() }}</span> }
             @if (resultOrganization()) { <span class="tv-chip">{{ resultOrganization() }}</span> }
           </div>
         }
@@ -306,7 +345,7 @@
         @if (resultLevel() || resultSenateNo() || resultOrganization()) {
           <div class="tv-meta">
             @if (resultLevel()) { <span class="tv-chip">{{ resultLevel() }}</span> }
-            @if (resultSenateNo()) { <span class="tv-chip">Senate No. {{ resultSenateNo() }}</span> }
+            @if (resultSenateNo()) { <span class="tv-chip">ID No. {{ resultSenateNo() }}</span> }
             @if (resultOrganization()) { <span class="tv-chip">{{ resultOrganization() }}</span> }
           </div>
         }
@@ -365,3 +404,13 @@
     }
   </div>
 }
+
+<!-- TV-mode corner preview: shrink / enlarge (the page controls are hidden behind the TV screen). -->
+<ng-template #pipSize>
+  <span class="pip-size">
+    <button type="button" class="pip-size-btn" (click)="stepCamSize(-1)" [disabled]="camSize() === 'sm'"
+            aria-label="Smaller camera preview"><mat-icon>remove</mat-icon></button>
+    <button type="button" class="pip-size-btn" (click)="stepCamSize(1)" [disabled]="camSize() === 'lg'"
+            aria-label="Larger camera preview"><mat-icon>add</mat-icon></button>
+  </span>
+</ng-template>

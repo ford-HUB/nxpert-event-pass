@@ -229,7 +229,7 @@ export class PublicEventComponent implements OnInit {
       return;
     }
     if (!this.senateNo.trim()) {
-      this.toast.warning('Please enter your Senate No.');
+      this.toast.warning('Please enter your ID No.');
       return;
     }
     const ids = [...this.selectedSessions()];
@@ -412,7 +412,7 @@ export class PublicEventComponent implements OnInit {
     const senate = this.editSenateNo.trim();
     const name = this.editName.trim();
     if (!senate || !name) {
-      this.toast.warning('Enter your Senate No. and the name you registered with.');
+      this.toast.warning('Enter your ID No. and the name you registered with.');
       return;
     }
     this.editResolving.set(true);
@@ -425,7 +425,7 @@ export class PublicEventComponent implements OnInit {
         this.editResolving.set(false);
         this.toast.error(
           err?.error?.message ??
-            'No matching registration was found. Please check your Senate No. and name.',
+            'No matching registration was found. Please check your ID No. and name.',
         );
       },
     });

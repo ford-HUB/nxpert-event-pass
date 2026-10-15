@@ -44,7 +44,11 @@ public class RegistrationsController : ControllerBase
             r.Token, r.RegisteredAt, r.ConfirmedAt, r.CheckedInAt,
             r.SessionId, r.Session != null ? r.Session.Title : null,
             r.Session != null ? r.Session.PosterImage : null,
-            FormJson.ReadSchema(r.Event.FormSchema).Count > 0)));
+            FormJson.ReadSchema(r.Event.FormSchema).Count > 0,
+            EventFormats.Normalize(r.Event.Format),
+            // Join link only once confirmed (same rule as the emailed invite).
+            r.ConfirmedAt != null && EventFormats.HasOnline(r.Event.Format)
+                ? CalendarInvite.MeetingUrlFor(r.Event, r.Session) : null)));
     }
 
     // ---- Participant/Admin: view a registration's form (fields + current answers) ----
@@ -192,7 +196,7 @@ public class RegistrationsController : ControllerBase
         var senate = (req.SenateNo ?? "").Trim();
         var name = CollapseSpaces(req.Name ?? "");
         if (senate.Length == 0 || name.Length == 0)
-            return BadRequest(new { message = "Please enter your Senate No. and the name you registered with." });
+            return BadRequest(new { message = "Please enter your ID No. and the name you registered with." });
 
         var ev = await _db.Events.FirstOrDefaultAsync(e => e.PublicSlug == slug);
         if (ev is null) return NotFound(new { message = "Event not found." });
@@ -213,7 +217,7 @@ public class RegistrationsController : ControllerBase
 
         // Generic failure so a wrong Senate No. and a wrong name are indistinguishable — no probing.
         if (reg is null)
-            return NotFound(new { message = "No matching registration was found. Please check your Senate No. and the name you registered with." });
+            return NotFound(new { message = "No matching registration was found. Please check your ID No. and the name you registered with." });
 
         return Ok(new { token = reg.Token.ToString() });
     }
@@ -316,7 +320,7 @@ public class RegistrationsController : ControllerBase
         // Senate No. is required and is the member key — one email may register several members,
         // each identified by a distinct Senate No.
         if (string.IsNullOrWhiteSpace(req.SenateNo))
-            return BadRequest(new { message = "Please enter your Senate No." });
+            return BadRequest(new { message = "Please enter your ID No." });
 
         var ev = await _db.Events.Include(e => e.Sessions).FirstOrDefaultAsync(e => e.PublicSlug == slug);
         if (ev is null) return NotFound(new { message = "Event not found." });
@@ -466,12 +470,26 @@ public class RegistrationsController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Cancel(int id)
     {
-        var reg = await _db.Registrations.FindAsync(id);
+        var reg = await _db.Registrations
+            .Include(r => r.Event).Include(r => r.Session).Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.Id == id);
         if (reg is null) return NotFound();
-        if (!User.IsInRole(Roles.Admin) && reg.UserId != this.UserId()) return Forbid();
+        var own = reg.UserId == this.UserId();
+        if (!own && !User.IsInRole(Roles.Admin)) return Forbid();
+        // Admins cancelling someone else's registration: pending ones only (see the bulk
+        // AttendanceController.Cancel) — a confirmed registration may already have a pass out.
+        if (!own && (reg.ConfirmedAt is not null || reg.CheckedInAt is not null))
+            return BadRequest(new { message = "Only pending registrations can be cancelled." });
 
         _db.Registrations.Remove(reg);
         await _db.SaveChangesAsync();
+
+        // A confirmed online / hybrid registration had a calendar invite — withdraw it.
+        if (reg.Event is not null && EventFormats.HasOnline(reg.Event.Format))
+        {
+            try { await _pass.SendMeetingCancelAsync(reg.Event, reg, MeetingCancelReason.RegistrationCancelled); }
+            catch { /* the cancellation itself succeeded; the calendar update is best-effort */ }
+        }
         return NoContent();
     }
 

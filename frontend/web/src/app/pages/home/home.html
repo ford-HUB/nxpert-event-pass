@@ -1,0 +1,30 @@
+<div class="home">
+  @if (categories().length > 1) {
+    <div class="module-tabs" role="tablist">
+      <button type="button" role="tab" class="module-tab" [class.active]="filter() === 'All'"
+              [attr.aria-selected]="filter() === 'All'" (click)="filter.set('All')">All</button>
+      @for (c of categories(); track c) {
+        <button type="button" role="tab" class="module-tab" [class.active]="filter() === c"
+                [attr.aria-selected]="filter() === c" (click)="filter.set(c)">{{ c }}</button>
+      }
+    </div>
+  }
+
+  <div class="section-bar">
+    <h1 class="section-name">Core Modules</h1>
+    <span class="total-pill">{{ visible().length }} total</span>
+  </div>
+
+  <div class="module-grid">
+    @for (m of visible(); track m.link) {
+      <a class="module-card" [routerLink]="m.link">
+        <span class="module-icon"><mat-icon>{{ m.icon }}</mat-icon></span>
+        <span class="module-text">
+          <span class="module-title">{{ m.title }}</span>
+          <span class="module-sub">{{ m.subtitle }}</span>
+        </span>
+        <span class="module-go" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+      </a>
+    }
+  </div>
+</div>

@@ -541,6 +541,32 @@ public class AttendanceController : ControllerBase
         return Ok(new ConfirmResult(confirmed, emailed, already, noEmail));
     }
 
+    // ---- Bulk cancel: remove selected PENDING registrations (the "reject" side of Confirm) ----
+    // Confirmed or checked-in registrations are never touched here — a pass may already be out,
+    // so they're skipped and reported back as NotPending.
+    [HttpPost("cancel")]
+    public async Task<ActionResult<CancelRegistrationsResult>> Cancel(int eventId, CancelRegistrationsRequest req)
+    {
+        var ev = await _db.Events.FindAsync(eventId);
+        if (ev is null) return NotFound();
+
+        var ids = (req.RegistrationIds ?? new()).Distinct().ToList();
+        if (ids.Count == 0)
+            return BadRequest(new { message = "Select at least one registration to cancel." });
+
+        var regs = await _db.Registrations
+            .Where(r => r.EventId == eventId && ids.Contains(r.Id))
+            .ToListAsync();
+
+        var pending = regs.Where(r => r.ConfirmedAt is null && r.CheckedInAt is null).ToList();
+        if (pending.Count == 0)
+            return BadRequest(new { message = "Only pending registrations can be cancelled." });
+
+        _db.Registrations.RemoveRange(pending);
+        await _db.SaveChangesAsync();
+        return Ok(new CancelRegistrationsResult(pending.Count, regs.Count - pending.Count));
+    }
+
     [HttpGet("export")]
     public async Task<IActionResult> Export(int eventId)
     {

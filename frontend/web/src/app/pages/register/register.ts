@@ -4,7 +4,6 @@ import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -19,7 +18,6 @@ import { AuthService } from '../../core/auth.service';
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSelectModule,
     MatButtonModule,
     MatIconModule,
     MatProgressBarModule,
@@ -39,14 +37,6 @@ export class RegisterComponent {
   senateNo = '';
   level = '';
   email = '';
-
-  readonly levelOptions = [
-    'Senator',
-    'Jake Gonzales Exemplary Fellow',
-    'Jake Gonzales Venerable Fellow',
-    'Chairman Circle',
-    'Honorary Chairman',
-  ];
   password = '';
   phone = '';
   organization = '';

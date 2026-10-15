@@ -63,7 +63,7 @@
 
   <!-- Registrations by chapter (for a selected event) -->
   <div class="toolbar-row section-head">
-    <h2>Registrations by chapter</h2>
+    <h2>Registrations by Department</h2>
     <span class="spacer"></span>
     @if (events().length > 0) {
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-picker">
@@ -134,7 +134,7 @@
     </mat-card>
 
     <!-- Kit claimed by chapter (same selected event) -->
-    <mat-card class="chapter-card kit-card">
+    <!-- <mat-card class="chapter-card kit-card">
       <mat-card-header class="collapse-head" (click)="kitChartOpen.set(!kitChartOpen())"
                        role="button" tabindex="0"
                        (keydown.enter)="kitChartOpen.set(!kitChartOpen())"
@@ -171,6 +171,6 @@
         }
       </mat-card-content>
       }
-    </mat-card>
+    </mat-card> -->
   }
 }

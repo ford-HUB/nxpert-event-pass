@@ -1,7 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -19,7 +18,6 @@ import { AppNotification } from './core/models';
     RouterLink,
     RouterLinkActive,
     DatePipe,
-    MatToolbarModule,
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
@@ -34,6 +32,18 @@ export class App {
   protected readonly pwa = inject(PwaInstallService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+
+  // "Vien Dexter" -> "VD" for the header avatar.
+  protected readonly initials = computed(() => {
+    const first = this.auth.firstName() || this.auth.fullName();
+    const last = this.auth.lastName();
+    return ((first[0] ?? '') + (last[0] ?? '')).toUpperCase() || '?';
+  });
+
+  // "SuperAdmin" -> "Super Admin"
+  protected readonly roleLabel = computed(() =>
+    (this.auth.role() ?? '').replace(/([a-z])([A-Z])/g, '$1 $2'),
+  );
 
   // Open a notification: mark it read and follow its link.
   openNotif(n: AppNotification): void {

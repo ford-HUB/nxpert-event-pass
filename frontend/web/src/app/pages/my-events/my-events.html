@@ -12,46 +12,71 @@
     <p class="muted">Registration links arrive by email invitation.</p>
   </div>
 } @else {
-  <div class="card-grid">
+  <div class="ev-grid">
     @for (reg of regs(); track reg.id) {
-      <mat-card>
+      <article class="ev-card">
         @if (reg.sessionPosterImage) {
-          <img class="reg-poster zoomable" [src]="reg.sessionPosterImage"
-               [alt]="(reg.sessionTitle || reg.eventTitle) + ' poster'"
-               (click)="viewImage(reg.sessionPosterImage)" />
+          <div class="ev-media">
+            <img class="zoomable" [src]="reg.sessionPosterImage"
+                 [alt]="(reg.sessionTitle || reg.eventTitle) + ' poster'"
+                 (click)="viewImage(reg.sessionPosterImage)" />
+          </div>
         }
-        <mat-card-header>
-          <mat-card-title>{{ reg.eventTitle }}</mat-card-title>
-          @if (reg.sessionTitle) {
-            <mat-card-subtitle><strong>{{ reg.sessionTitle }}</strong></mat-card-subtitle>
+        <div class="ev-body">
+          <div class="ev-head">
+            <span class="ev-date">
+              <span class="m">{{ reg.startsAt | date: 'MMM' }}</span>
+              <span class="d">{{ reg.startsAt | date: 'd' }}</span>
+            </span>
+            <div class="ev-heading">
+              <h2 class="ev-name">{{ reg.eventTitle }}</h2>
+              @if (reg.sessionTitle) { <p class="ev-session">{{ reg.sessionTitle }}</p> }
+              <div class="ev-tags">
+                @if (reg.checkedInAt) {
+                  <span class="ev-tag ok"><mat-icon>check_circle</mat-icon> Checked in</span>
+                } @else if (reg.confirmedAt) {
+                  <span class="ev-tag brand"><mat-icon>verified</mat-icon> Confirmed</span>
+                } @else {
+                  <span class="ev-tag warn"><mat-icon>hourglass_empty</mat-icon> Pending confirmation</span>
+                }
+              </div>
+            </div>
+          </div>
+          <div class="ev-meta">
+            <p class="ev-line"><mat-icon>schedule</mat-icon>
+              <span>{{ reg.startsAt | date: 'EEE, MMM d y, h:mm a' }}</span></p>
+            @if (reg.format !== 'Online') {
+              <p class="ev-line"><mat-icon>place</mat-icon> <span>{{ reg.venue }}</span></p>
+            }
+            @if (reg.format === 'Online' || reg.format === 'Hybrid') {
+              <p class="ev-line"><mat-icon>videocam</mat-icon>
+                <span>{{ reg.meetingUrl ? 'Online meeting' : (reg.confirmedAt ? 'Online meeting — link coming soon' : 'Online meeting — link available once confirmed') }}</span></p>
+            }
+          </div>
+        </div>
+        <div class="ev-foot">
+          @if (reg.meetingUrl) {
+            <a class="ev-btn solid" [href]="reg.meetingUrl" target="_blank" rel="noopener">
+              <mat-icon>videocam</mat-icon> Join meeting
+            </a>
           }
-          <mat-card-subtitle>{{ reg.startsAt | date: 'EEE, MMM d y, h:mm a' }}</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="muted"><mat-icon class="inline-icon">place</mat-icon> {{ reg.venue }}</p>
-          @if (reg.checkedInAt) {
-            <span class="status-pill ok"><mat-icon class="inline-icon">check_circle</mat-icon> Checked in</span>
-          } @else if (reg.confirmedAt) {
-            <span class="status-pill ok"><mat-icon class="inline-icon">verified</mat-icon> Confirmed</span>
-          } @else {
-            <span class="status-pill pending"><mat-icon class="inline-icon">hourglass_empty</mat-icon> Pending confirmation</span>
+          <!-- Online-only events have no door check-in, so no QR pass. -->
+          @if (reg.format !== 'Online') {
+            <button
+              type="button"
+              class="ev-btn"
+              [class.solid]="!reg.meetingUrl"
+              (click)="showPass(reg)"
+              [disabled]="!reg.confirmedAt && !reg.checkedInAt"
+              [matTooltip]="(!reg.confirmedAt && !reg.checkedInAt) ? 'Your pass will be available once your registration is confirmed' : ''"
+            >
+              <mat-icon>qr_code_2</mat-icon> Show pass
+            </button>
           }
-        </mat-card-content>
-        <mat-card-actions class="reg-actions">
-          <button
-            mat-flat-button
-            color="primary"
-            (click)="showPass(reg)"
-            [disabled]="!reg.confirmedAt && !reg.checkedInAt"
-            [matTooltip]="(!reg.confirmedAt && !reg.checkedInAt) ? 'Your pass will be available once your registration is confirmed' : ''"
-          >
-            <mat-icon>qr_code_2</mat-icon> Show pass
-          </button>
           <!-- <button mat-button (click)="leaveFeedback(reg)">
             <mat-icon>star_rate</mat-icon> Rate
           </button> -->
-          <span class="spacer"></span>
-          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="More actions">
+          <button mat-icon-button class="ev-more" [matMenuTriggerFor]="menu" aria-label="More actions">
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
@@ -67,8 +92,8 @@
               <mat-icon>event_busy</mat-icon> Cancel registration
             </button>
           </mat-menu>
-        </mat-card-actions>
-      </mat-card>
+        </div>
+      </article>
     }
   </div>
 }

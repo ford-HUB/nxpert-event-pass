@@ -86,6 +86,30 @@ export class FaceService {
     };
   }
 
+  /**
+   * How squarely a detected face looks at the camera: yaw = nose offset from the eye midpoint
+   * (in eye-distances, 0 = straight on), roll = eye-line tilt in degrees. Null when landmarks are
+   * unavailable. Turned or tilted faces give unreliable descriptors, so matching skips them.
+   */
+  pose(sample: FaceSample): { yaw: number; roll: number } | null {
+    try {
+      const centroid = (pts: { x: number; y: number }[]) => ({
+        x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
+        y: pts.reduce((a, p) => a + p.y, 0) / pts.length,
+      });
+      const le = centroid(sample.landmarks.getLeftEye());
+      const re = centroid(sample.landmarks.getRightEye());
+      const nose = centroid(sample.landmarks.getNose());
+      const eyeDist = Math.hypot(re.x - le.x, re.y - le.y) || 1;
+      return {
+        yaw: (nose.x - (le.x + re.x) / 2) / eyeDist,
+        roll: Math.abs((Math.atan2(re.y - le.y, re.x - le.x) * 180) / Math.PI),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   /** Euclidean distance between two descriptors (lower = more similar; ~0.5 is a good match). */
   distance(a: ArrayLike<number>, b: ArrayLike<number>): number {
     let s = 0;

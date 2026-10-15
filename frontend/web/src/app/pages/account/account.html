@@ -79,17 +79,12 @@
 
         <div class="two-col">
           <mat-form-field appearance="outline">
-            <mat-label>Senate No.</mat-label>
+            <mat-label>ID No.</mat-label>
             <input matInput name="senateNo" [(ngModel)]="senateNo" maxlength="50" />
           </mat-form-field>
           <mat-form-field appearance="outline">
-            <mat-label>Level</mat-label>
-            <mat-select name="level" [(ngModel)]="level">
-              <mat-option [value]="''">— None —</mat-option>
-              @for (opt of levelOptions; track opt) {
-                <mat-option [value]="opt">{{ opt }}</mat-option>
-              }
-            </mat-select>
+            <mat-label>Designation</mat-label>
+            <input matInput name="level" [(ngModel)]="level" maxlength="100" />
           </mat-form-field>
         </div>
 

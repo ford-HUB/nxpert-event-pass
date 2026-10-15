@@ -1,54 +1,24 @@
 @if (auth.isLoggedIn()) {
-  <mat-toolbar class="app-toolbar">
-    <span class="brand" routerLink="/">
-      <span class="brand-badge"><mat-icon>event_available</mat-icon></span>
-      <span class="brand-text">NXPass</span>
-    </span>
+  <header class="app-header">
+    <!-- Every module is reached from the Home launcher (pages/home). -->
+    <a class="home-btn" routerLink="/home" routerLinkActive="active" aria-label="Home">
+      <mat-icon>home</mat-icon> <span>Home</span>
+    </a>
 
-    <nav class="nav-links">
-      @if (auth.isAdmin()) {
-        <a mat-button routerLink="/admin/dashboard" routerLinkActive="active-link">
-          <mat-icon>dashboard</mat-icon> <span>Dashboard</span>
-        </a>
-        <a mat-button routerLink="/admin/events" routerLinkActive="active-link">
-          <mat-icon>event</mat-icon> <span>Events</span>
-        </a>
-        <a mat-button routerLink="/admin/users" routerLinkActive="active-link">
-          <mat-icon>manage_accounts</mat-icon> <span>Users</span>
-        </a>
-        <a mat-button routerLink="/admin/settings" routerLinkActive="active-link">
-          <mat-icon>settings</mat-icon> <span>Settings</span>
-        </a>
-      } @else if (auth.isMerchant()) {
-        <!-- Merchant: meal-stub scanning only -->
-        <a mat-button routerLink="/merchant/scan" routerLinkActive="active-link">
-          <mat-icon>restaurant</mat-icon> <span>Meal Scanner</span>
-        </a>
-      } @else if (auth.canConfirm()) {
-        <!-- Non-admin registration confirmer: events access for confirmation only -->
-        <a mat-button routerLink="/admin/events" routerLinkActive="active-link">
-          <mat-icon>how_to_reg</mat-icon> <span>Confirm Registrations</span>
-        </a>
-        <a mat-button routerLink="/events" routerLinkActive="active-link">
-          <mat-icon>event</mat-icon> <span>Browse Events</span>
-        </a>
-        <a mat-button routerLink="/my-events" routerLinkActive="active-link">
-          <mat-icon>confirmation_number</mat-icon> <span>My Events</span>
-        </a>
-      } @else {
-        <a mat-button routerLink="/events" routerLinkActive="active-link">
-          <mat-icon>event</mat-icon> <span>Events</span>
-        </a>
-        <a mat-button routerLink="/my-events" routerLinkActive="active-link">
-          <mat-icon>confirmation_number</mat-icon> <span>My Events</span>
-        </a>
-      }
-    </nav>
+    <span class="header-divider"></span>
+
+    <span class="brand" routerLink="/home">
+      <span class="brand-badge"><mat-icon>grid_view</mat-icon></span>
+      <span class="brand-lines">
+        <span class="brand-text">NXPass</span>
+        <span class="brand-sub">Event Registration</span>
+      </span>
+    </span>
 
     <span class="spacer"></span>
 
     <!-- Realtime notifications -->
-    <button mat-icon-button [matMenuTriggerFor]="notifMenu" aria-label="Notifications"
+    <button mat-icon-button class="notif-btn" [matMenuTriggerFor]="notifMenu" aria-label="Notifications"
             [matBadge]="rt.unread()" [matBadgeHidden]="rt.unread() === 0"
             matBadgeColor="warn" matBadgeSize="small">
       <mat-icon>{{ rt.unread() > 0 ? 'notifications_active' : 'notifications' }}</mat-icon>
@@ -82,9 +52,18 @@
       }
     </mat-menu>
 
-    <button mat-button [matMenuTriggerFor]="menu">
-      <mat-icon>account_circle</mat-icon>
-      <span class="user-name">{{ auth.fullName() }}</span>
+    <button type="button" class="user-chip" [matMenuTriggerFor]="menu" aria-label="Account menu">
+      <span class="user-avatar">
+        @if (auth.photoUrl(); as photo) {
+          <img [src]="photo" alt="" />
+        } @else {
+          {{ initials() }}
+        }
+      </span>
+      <span class="user-lines">
+        <span class="user-name">{{ auth.fullName() }}</span>
+        <span class="user-role">{{ roleLabel() }}</span>
+      </span>
     </button>
     <mat-menu #menu="matMenu">
       @if (!auth.isMerchant()) {
@@ -101,7 +80,7 @@
         <mat-icon>logout</mat-icon> Sign out
       </button>
     </mat-menu>
-  </mat-toolbar>
+  </header>
 }
 
 @if (auth.needsVerification()) {

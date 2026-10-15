@@ -27,6 +27,12 @@ export const routes: Routes = [
       import('./pages/registration-edit/registration-edit').then((m) => m.RegistrationEditComponent),
   },
   {
+    // Module launcher: role-based cards for every area the user can open.
+    path: 'home',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/home/home').then((m) => m.HomeComponent),
+  },
+  {
     path: 'admin/dashboard',
     canActivate: [adminGuard],
     loadComponent: () =>

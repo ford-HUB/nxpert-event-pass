@@ -27,65 +27,76 @@
     <p class="muted">No events match “{{ search() }}”.</p>
   }
 
-  <div class="events-grid">
+  <div class="ev-grid">
     @for (e of filtered(); track e.id) {
-      <mat-card class="event-card">
-        <!-- Banner -->
-        @if (e.bannerImage) {
-          <div class="ev-banner has-image">
+      <article class="ev-card">
+        <!-- Banner (or gradient placeholder) with the date tile and status chips on top -->
+        <div class="ev-media" [class.placeholder]="!e.bannerImage">
+          @if (e.bannerImage) {
             <img class="zoomable" [src]="e.bannerImage" [alt]="e.title + ' banner'"
                  (click)="viewImage(e.bannerImage)" />
-          </div>
-        } @else {
-          <div class="ev-banner"><mat-icon>event</mat-icon></div>
-        }
-
-        <mat-card-content class="ev-body">
-          <div class="ev-badges">
+          } @else {
+            <mat-icon>celebration</mat-icon>
+          }
+          <span class="ev-date">
+            <span class="m">{{ e.startsAt | date: 'MMM' }}</span>
+            <span class="d">{{ e.startsAt | date: 'd' }}</span>
+          </span>
+          <div class="ev-tags">
             @if (isRegistered(e)) {
-              <span class="status-pill registered">
-                <mat-icon class="inline-icon">check_circle</mat-icon> Registered
-              </span>
+              <span class="ev-tag brand"><mat-icon>check_circle</mat-icon> Registered</span>
             }
             @if (e.isFull) {
-              <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
+              <span class="ev-tag warn"><mat-icon>groups</mat-icon> Full</span>
             } @else if (isPast(e)) {
-              <span class="status-pill closed"><mat-icon class="inline-icon">history</mat-icon> Ended</span>
+              <span class="ev-tag"><mat-icon>history</mat-icon> Ended</span>
             } @else {
-              <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Open</span>
+              <span class="ev-tag ok"><mat-icon>how_to_reg</mat-icon> Open</span>
             }
-            @if (e.sessions.length > 0) {
-              <span class="status-pill neutral">
-                <mat-icon class="inline-icon">calendar_view_day</mat-icon>
-                {{ e.sessions.length }} sub-event{{ e.sessions.length === 1 ? '' : 's' }}
-              </span>
+            @if (e.format === 'Online' || e.format === 'Hybrid') {
+              <span class="ev-tag brand"><mat-icon>videocam</mat-icon> {{ e.format }}</span>
             }
           </div>
+        </div>
 
-          <h2 class="ev-title">{{ e.title }}</h2>
-          <p class="ev-row"><mat-icon class="inline-icon">schedule</mat-icon>
-            {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'MMM d, h:mm a' }}
-          </p>
-          <p class="ev-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
-          @if (e.description) { <p class="ev-desc">{{ e.description }}</p> }
-        </mat-card-content>
+        <div class="ev-body">
+          <h2 class="ev-name">{{ e.title }}</h2>
+          <div class="ev-meta">
+            <p class="ev-line"><mat-icon>schedule</mat-icon>
+              <span>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'MMM d, h:mm a' }}</span>
+            </p>
+            @if (e.format === 'Online') {
+              <p class="ev-line"><mat-icon>videocam</mat-icon> <span>Online meeting</span></p>
+            } @else {
+              <p class="ev-line"><mat-icon>place</mat-icon>
+                <span>{{ e.venue }}@if (e.format === 'Hybrid') { · also online }</span></p>
+            }
+            @if (e.sessions.length > 0) {
+              <p class="ev-line"><mat-icon>calendar_view_day</mat-icon>
+                <span>{{ e.sessions.length }} sub-event{{ e.sessions.length === 1 ? '' : 's' }}</span>
+              </p>
+            }
+          </div>
+          @if (e.description) { <p class="ev-blurb">{{ e.description }}</p> }
+        </div>
 
-        <mat-card-actions class="ev-actions">
-          <button mat-stroked-button (click)="openDetails(e)">
-            <mat-icon>info</mat-icon> View details
+        <div class="ev-foot">
+          <button type="button" class="ev-btn" (click)="openDetails(e)">
+            <mat-icon>info</mat-icon> Details
           </button>
+          <span class="spacer"></span>
           @if (registrationBlocked(e)) {
-            <a mat-stroked-button color="primary" routerLink="/my-events">
+            <a class="ev-btn done" routerLink="/my-events">
               <mat-icon>check_circle</mat-icon> Registered
             </a>
           } @else {
-            <a mat-flat-button color="primary" [routerLink]="['/e', e.publicSlug]">
-              <mat-icon>how_to_reg</mat-icon>
+            <a class="ev-btn solid" [routerLink]="['/e', e.publicSlug]">
+              <mat-icon>{{ isPast(e) ? 'visibility' : 'how_to_reg' }}</mat-icon>
               {{ isPast(e) ? 'View' : (isRegistered(e) ? 'Add sub-event' : 'Register') }}
             </a>
           }
-        </mat-card-actions>
-      </mat-card>
+        </div>
+      </article>
     }
   </div>
 }

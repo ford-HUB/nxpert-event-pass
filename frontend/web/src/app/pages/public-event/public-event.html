@@ -23,7 +23,16 @@
         <p class="detail-row"><mat-icon class="inline-icon">schedule</mat-icon>
           {{ e.startsAt | date: 'EEEE, MMMM d y' }} · {{ e.startsAt | date: 'h:mm a' }}–{{ e.endsAt | date: 'h:mm a' }}
         </p>
-        <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+        @if (e.format === 'Online') {
+          <p class="detail-row"><mat-icon class="inline-icon">videocam</mat-icon>
+            Online meeting — the join link is sent once your registration is confirmed</p>
+        } @else {
+          <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+          @if (e.format === 'Hybrid') {
+            <p class="detail-row"><mat-icon class="inline-icon">videocam</mat-icon>
+              Also online — the join link is sent once your registration is confirmed</p>
+          }
+        }
         <p class="event-desc">{{ e.description }}</p>
 
         @if (e.registrationFees) {
@@ -159,7 +168,7 @@
           }
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Senate No.</mat-label>
+            <mat-label>ID No.</mat-label>
             <input matInput [value]="auth.senateNo() || '—'" readonly />
             <mat-icon matSuffix>badge</mat-icon>
           </mat-form-field>
@@ -226,11 +235,11 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Senate No.</mat-label>
+            <mat-label>ID No.</mat-label>
             <input matInput name="senateNo" [(ngModel)]="senateNo" #gSenate="ngModel"
                    required maxlength="50" />
             <mat-icon matSuffix>badge</mat-icon>
-            @if (gSenate.hasError('required')) { <mat-error>Please enter your Senate No.</mat-error> }
+            @if (gSenate.hasError('required')) { <mat-error>Please enter your ID No.</mat-error> }
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
@@ -390,10 +399,10 @@
               </p>
             } @else {
               <p class="muted no-account-note">
-                Enter your Senate No. and the name you registered with to open your response right away.
+                Enter your ID No. and the name you registered with to open your response right away.
               </p>
               <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Senate No.</mat-label>
+                <mat-label>ID No.</mat-label>
                 <input matInput name="editSenateNo" [(ngModel)]="editSenateNo"
                        (keyup.enter)="goToEditBySenate()" autocomplete="off" />
                 <mat-icon matSuffix>badge</mat-icon>

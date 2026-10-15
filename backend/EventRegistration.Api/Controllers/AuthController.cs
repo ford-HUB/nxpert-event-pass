@@ -45,9 +45,9 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.FirstName) || string.IsNullOrWhiteSpace(req.LastName))
             return BadRequest(new { message = "First and last name are required." });
         if (string.IsNullOrWhiteSpace(req.SenateNo))
-            return BadRequest(new { message = "Senate No. is required." });
+            return BadRequest(new { message = "ID No. is required." });
         if (string.IsNullOrWhiteSpace(req.Level))
-            return BadRequest(new { message = "Level is required." });
+            return BadRequest(new { message = "Designation is required." });
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(req.Password))
             return BadRequest(new { message = "Email and password are required." });
 

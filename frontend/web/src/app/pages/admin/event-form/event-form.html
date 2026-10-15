@@ -75,11 +75,50 @@
         <p class="error-text field-error">End date/time must be after the start.</p>
       }
 
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Venue</mat-label>
-        <input matInput name="venue" [(ngModel)]="venue" #venueCtrl="ngModel" required maxlength="300" />
-        @if (venueCtrl.hasError('required')) { <mat-error>Venue is required.</mat-error> }
-      </mat-form-field>
+      <!-- ===== Format: in person / online / hybrid ===== -->
+      <div class="format-block">
+        <span class="format-label">Format</span>
+        <mat-button-toggle-group name="format" [(ngModel)]="format" class="format-toggle"
+                                 aria-label="Event format">
+          @for (f of formats; track f.value) {
+            <mat-button-toggle [value]="f.value"><mat-icon>{{ f.icon }}</mat-icon> {{ f.label }}</mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </div>
+
+      @if (hasVenue) {
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Venue</mat-label>
+          <input matInput name="venue" [(ngModel)]="venue" #venueCtrl="ngModel" required maxlength="300" />
+          @if (venueCtrl.hasError('required')) { <mat-error>Venue is required.</mat-error> }
+        </mat-form-field>
+      }
+
+      @if (hasOnline) {
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Online meeting link</mat-label>
+          <mat-icon matPrefix class="field-prefix">videocam</mat-icon>
+          <input matInput name="meetingUrl" [(ngModel)]="meetingUrl" #meetCtrl="ngModel" maxlength="1000"
+                 inputmode="url" placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+          @if (meetingUrl.trim() && !isUrl(meetingUrl)) {
+            <mat-hint class="hint-error">Paste the full link, starting with https://</mat-hint>
+          } @else {
+            <mat-hint>Create the meeting in Teams or Outlook, then paste its join link here.</mat-hint>
+          }
+        </mat-form-field>
+        <div class="online-note" [class.warn]="missingMeetingLink">
+          <mat-icon>{{ missingMeetingLink ? 'warning' : 'event_available' }}</mat-icon>
+          <span>
+            @if (missingMeetingLink) {
+              No meeting link yet — confirmation emails will go out without one. You can add it
+              later; confirmed registrants then receive an updated invite automatically.
+            } @else {
+              Confirmed registrants get a <strong>Join online meeting</strong> button and a calendar
+              invite. If the time or link changes later, an updated invite is sent automatically.
+            }
+          </span>
+        </div>
+      }
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>TV welcome message</mat-label>
@@ -189,12 +228,26 @@
               </mat-form-field>
             </div>
 
-            <div class="two-col">
-              <mat-form-field appearance="outline">
-                <mat-label>Venue (optional)</mat-label>
-                <input matInput [name]="'sVenue' + i" [(ngModel)]="s.venue" maxlength="300"
-                       placeholder="Defaults to the event venue" />
+            @if (hasOnline) {
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Meeting link for this sub-event (optional)</mat-label>
+                <mat-icon matPrefix class="field-prefix">videocam</mat-icon>
+                <input matInput [name]="'sMeet' + i" [(ngModel)]="s.meetingUrl" maxlength="1000"
+                       inputmode="url" placeholder="Defaults to the event's meeting link" />
+                @if (s.meetingUrl.trim() && !isUrl(s.meetingUrl)) {
+                  <mat-hint class="hint-error">Paste the full link, starting with https://</mat-hint>
+                }
               </mat-form-field>
+            }
+
+            <div class="two-col">
+              @if (hasVenue) {
+                <mat-form-field appearance="outline">
+                  <mat-label>Venue (optional)</mat-label>
+                  <input matInput [name]="'sVenue' + i" [(ngModel)]="s.venue" maxlength="300"
+                         placeholder="Defaults to the event venue" />
+                </mat-form-field>
+              }
               <mat-form-field appearance="outline">
                 <mat-label>Max participants (optional)</mat-label>
                 <input matInput type="number" min="1" [name]="'sCap' + i" [(ngModel)]="s.capacity"

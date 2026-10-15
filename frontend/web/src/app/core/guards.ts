@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 
 // The default landing page for a logged-in user, by role.
 function homeFor(auth: AuthService): string {
-  return auth.isMerchant() ? '/merchant/scan' : '/my-events';
+  return auth.isMerchant() ? '/merchant/scan' : '/home';
 }
 
 export const authGuard: CanActivateFn = (_route, state) => {

@@ -16,14 +16,6 @@ import { AuthService } from '../../core/auth.service';
 import { NotificationChannel, ProfileUpdate } from '../../core/models';
 import { FaceCaptureDialogComponent, FaceCaptureResult } from '../../shared/face-capture-dialog';
 
-const LEVEL_OPTIONS = [
-  'Senator',
-  'Jake Gonzales Exemplary Fellow',
-  'Jake Gonzales Venerable Fellow',
-  'Chairman Circle',
-  'Honorary Chairman',
-];
-
 @Component({
   selector: 'app-account',
   imports: [
@@ -47,8 +39,6 @@ export class AccountComponent implements OnInit {
   private toast = inject(ToastService);
   private dialog = inject(MatDialog);
   private cdr = inject(ChangeDetectorRef);
-
-  readonly levelOptions = LEVEL_OPTIONS;
 
   loading = signal(true);
   saving = signal(false);

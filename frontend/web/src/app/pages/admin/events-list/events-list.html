@@ -5,7 +5,7 @@
   </div>
   <span class="spacer"></span>
   @if (auth.isAdmin()) {
-    <a mat-flat-button color="primary" routerLink="/admin/events/new">
+    <a class="ev-btn solid" routerLink="/admin/events/new">
       <mat-icon>add</mat-icon> New event
     </a>
   }
@@ -18,47 +18,76 @@
     <mat-icon>event_note</mat-icon>
     <p>No events yet.</p>
     @if (auth.isAdmin()) {
-      <a mat-flat-button color="primary" routerLink="/admin/events/new">Create your first event</a>
+      <a class="ev-btn solid" routerLink="/admin/events/new">Create your first event</a>
     }
   </div>
 } @else {
-  <div class="card-grid">
+  <div class="ev-grid">
     @for (e of events(); track e.id) {
-      <mat-card class="clickable event-card-item" [routerLink]="['/admin/events', e.id]">
-        @if (auth.isAdmin()) {
-          <button mat-flat-button color="primary" class="start-scan-btn"
-                  (click)="startScanning(e, $event)"
-                  matTooltip="Open the check-in scanner for this event">
-            <mat-icon>qr_code_scanner</mat-icon> Start
-          </button>
-        }
-        <mat-card-header>
-          <mat-card-title>{{ e.title }}</mat-card-title>
-          <mat-card-subtitle>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <p class="muted"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
-          <div class="badge-row">
-            @if (e.status === 'Closed') {
-              <span class="status-pill closed"><mat-icon class="inline-icon">lock</mat-icon> Closed</span>
-            } @else if (e.isFull) {
-              <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
+      <div class="ev-card is-link" role="link" tabindex="0" [routerLink]="['/admin/events', e.id]"
+           [attr.aria-label]="'Open ' + e.title" (keydown.enter)="open(e, $event)">
+        <div class="ev-body">
+          <div class="ev-head">
+            <span class="ev-date">
+              <span class="m">{{ e.startsAt | date: 'MMM' }}</span>
+              <span class="d">{{ e.startsAt | date: 'd' }}</span>
+            </span>
+            <div class="ev-heading">
+              <h2 class="ev-name">{{ e.title }}</h2>
+              <div class="ev-tags">
+                @if (e.status === 'Closed') {
+                  <span class="ev-tag bad"><mat-icon>lock</mat-icon> Closed</span>
+                } @else if (e.isFull) {
+                  <span class="ev-tag warn"><mat-icon>groups</mat-icon> Full</span>
+                } @else {
+                  <span class="ev-tag ok"><mat-icon>how_to_reg</mat-icon> Open</span>
+                }
+                @if (e.format === 'Online' || e.format === 'Hybrid') {
+                  <span class="ev-tag brand"><mat-icon>videocam</mat-icon> {{ e.format }}</span>
+                }
+              </div>
+            </div>
+          </div>
+
+          <div class="ev-meta">
+            <p class="ev-line"><mat-icon>schedule</mat-icon>
+              <span>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</span></p>
+            @if (e.format === 'Online') {
+              <p class="ev-line"><mat-icon>videocam</mat-icon> <span>Online meeting</span></p>
             } @else {
-              <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Open</span>
+              <p class="ev-line"><mat-icon>place</mat-icon>
+                <span>{{ e.venue }}@if (e.format === 'Hybrid') { · also online }</span></p>
             }
           </div>
-          <div class="stat-row">
-            <div class="stat">
-              <span class="stat-num">{{ e.registeredCount }}{{ e.capacity ? '/' + e.capacity : '' }}</span>
-              <span class="muted">registered</span>
+
+          <div class="ev-stats">
+            <div class="ev-stat">
+              <span class="num">{{ e.registeredCount }}@if (e.capacity) {<span class="cap"> / {{ e.capacity }}</span>}</span>
+              <span class="lbl">Registered</span>
+              @if (e.capacity) {
+                <div class="ev-bar"><span [style.width.%]="fill(e.registeredCount, e.capacity)"></span></div>
+              }
             </div>
-            <div class="stat">
-              <span class="stat-num">{{ e.checkedInCount }}</span>
-              <span class="muted">checked in</span>
+            <div class="ev-stat">
+              <span class="num">{{ e.checkedInCount }}</span>
+              <span class="lbl">Checked in</span>
+              @if (e.registeredCount) {
+                <div class="ev-bar"><span [style.width.%]="fill(e.checkedInCount, e.registeredCount)"></span></div>
+              }
             </div>
           </div>
-        </mat-card-content>
-      </mat-card>
+        </div>
+
+        <div class="ev-foot">
+          @if (auth.isAdmin()) {
+            <button type="button" class="ev-btn solid" (click)="startScanning(e, $event)"
+                    matTooltip="Open the check-in scanner for this event">
+              <mat-icon>qr_code_scanner</mat-icon> Start check-in
+            </button>
+          }
+          <span class="ev-go" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+        </div>
+      </div>
     }
   </div>
 }

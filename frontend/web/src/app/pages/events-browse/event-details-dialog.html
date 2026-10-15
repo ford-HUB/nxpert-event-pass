@@ -10,7 +10,16 @@
   <p class="ev-row"><mat-icon class="inline-icon">schedule</mat-icon>
     {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'MMM d, h:mm a' }}
   </p>
-  <p class="ev-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+  @if (e.format === 'Online') {
+    <p class="ev-row"><mat-icon class="inline-icon">videocam</mat-icon>
+      Online meeting — the join link is sent once your registration is confirmed</p>
+  } @else {
+    <p class="ev-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
+    @if (e.format === 'Hybrid') {
+      <p class="ev-row"><mat-icon class="inline-icon">videocam</mat-icon>
+        Also online — the join link is sent once your registration is confirmed</p>
+    }
+  }
   @if (registered) {
     <p class="ev-row registered-note">
       <mat-icon class="inline-icon">check_circle</mat-icon>

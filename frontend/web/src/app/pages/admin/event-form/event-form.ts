@@ -9,9 +9,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { ApiService } from '../../../core/api.service';
 import { ToastService } from '../../../core/toast.service';
-import { EventUpsert, FieldType, SessionUpsert } from '../../../core/models';
+import { EventFormat, EventUpsert, FieldType, SessionUpsert } from '../../../core/models';
 
 interface BuilderField {
   key: string;
@@ -49,6 +50,7 @@ interface BuilderSession {
   endDate: Date | null;
   endTime: string;
   venue: string;
+  meetingUrl: string; // optional; falls back to the event's link
   capacity: number | null;
   poster: string | null;
   meals: BuilderMeal[];
@@ -96,6 +98,7 @@ function combine(date: Date | null, time: string): string {
     MatSlideToggleModule,
     MatSelectModule,
     MatDatepickerModule,
+    MatButtonToggleModule,
   ],
   templateUrl: './event-form.html',
 })
@@ -117,6 +120,14 @@ export class EventFormComponent implements OnInit {
   endDate: Date | null = null;
   endTime = '';
   venue = '';
+  // Attendance format + online meeting link (Online / Hybrid send a calendar invite on confirm).
+  format: EventFormat = 'InPerson';
+  meetingUrl = '';
+  readonly formats: { value: EventFormat; label: string; icon: string }[] = [
+    { value: 'InPerson', label: 'In person', icon: 'place' },
+    { value: 'Online', label: 'Online', icon: 'videocam' },
+    { value: 'Hybrid', label: 'Hybrid', icon: 'devices' },
+  ];
   isPublicLinkEnabled = true;
   status = 'Published';
   capacity: number | null = null;
@@ -200,6 +211,7 @@ export class EventFormComponent implements OnInit {
       endDate: this.startDate,
       endTime: '12:00',
       venue: '',
+      meetingUrl: '',
       capacity: null,
       poster: null,
       meals: [],
@@ -392,13 +404,45 @@ export class EventFormComponent implements OnInit {
     return this.capacity >= 1 && this.capacity >= this.registeredCount;
   }
 
+  // Online / Hybrid: has a meeting link + calendar invite. In person / Hybrid: has a venue.
+  get hasOnline(): boolean {
+    return this.format === 'Online' || this.format === 'Hybrid';
+  }
+  get hasVenue(): boolean {
+    return this.format !== 'Online';
+  }
+
+  isUrl(v: string): boolean {
+    try {
+      const u = new URL(v.trim());
+      return u.protocol === 'https:' || u.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  }
+
+  // Links are optional (can be added later) but must be real web addresses when given.
+  get meetingLinksValid(): boolean {
+    if (!this.hasOnline) return true;
+    const ok = (v: string) => !v.trim() || this.isUrl(v);
+    return ok(this.meetingUrl) && this.builderSessions.every((s) => ok(s.meetingUrl));
+  }
+
+  // No usable link anywhere yet → confirmations would go out without a join link.
+  get missingMeetingLink(): boolean {
+    if (!this.hasOnline || this.meetingUrl.trim()) return false;
+    const sessions = this.builderSessions.filter((s) => s.title.trim());
+    return sessions.length === 0 || sessions.some((s) => !s.meetingUrl.trim());
+  }
+
   get isValid(): boolean {
     return (
-      !!(this.title && this.venue && this.startDate && this.startTime && this.endDate && this.endTime) &&
+      !!(this.title && (this.venue.trim() || !this.hasVenue) && this.startDate && this.startTime && this.endDate && this.endTime) &&
       this.endAfterStart &&
       this.capacityValid &&
       this.builderValid &&
-      this.sessionsValid
+      this.sessionsValid &&
+      this.meetingLinksValid
     );
   }
 
@@ -417,7 +461,10 @@ export class EventFormComponent implements OnInit {
           this.startTime = s.time;
           this.endDate = en.date;
           this.endTime = en.time;
-          this.venue = e.venue;
+          this.format = e.format ?? 'InPerson';
+          this.meetingUrl = e.meetingUrl ?? '';
+          // Online-only events store "Online" as the venue; show an empty field instead.
+          this.venue = this.format === 'Online' && e.venue === 'Online' ? '' : e.venue;
           this.isPublicLinkEnabled = e.isPublicLinkEnabled;
           this.status = e.status;
           this.capacity = e.capacity;
@@ -453,6 +500,7 @@ export class EventFormComponent implements OnInit {
               endDate: se.date,
               endTime: se.time,
               venue: s.venue ?? '',
+              meetingUrl: s.meetingUrl ?? '',
               capacity: s.capacity,
               poster: s.posterImage,
               meals: (s.meals || []).map((m) => ({
@@ -504,7 +552,9 @@ export class EventFormComponent implements OnInit {
       description: this.description,
       startsAt: combine(this.startDate, this.startTime),
       endsAt: combine(this.endDate, this.endTime),
-      venue: this.venue,
+      venue: this.format === 'Online' ? this.venue.trim() || 'Online' : this.venue,
+      format: this.format,
+      meetingUrl: this.hasOnline ? this.meetingUrl.trim() || null : null,
       isPublicLinkEnabled: this.isPublicLinkEnabled,
       status: this.status,
       capacity: this.capacity && this.capacity > 0 ? this.capacity : null,
@@ -540,6 +590,7 @@ export class EventFormComponent implements OnInit {
           startsAt: combine(s.startDate, s.startTime),
           endsAt: combine(s.endDate, s.endTime),
           venue: s.venue.trim() || null,
+          meetingUrl: this.hasOnline ? s.meetingUrl.trim() || null : null,
           capacity: s.capacity && s.capacity > 0 ? s.capacity : null,
           posterImage: s.poster,
           meals: s.meals

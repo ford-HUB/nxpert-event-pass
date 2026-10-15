@@ -12,6 +12,7 @@ import { MatInputModule } from '@angular/material/input';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { MealStubScanResult } from '../../core/models';
+import { BeepService } from '../../core/beep.service';
 
 type Input = 'camera' | 'barcode';
 type Banner = 'idle' | 'valid' | 'already' | 'invalid' | 'notvalid' | 'error';
@@ -36,6 +37,7 @@ type Banner = 'idle' | 'valid' | 'already' | 'invalid' | 'notvalid' | 'error';
 export class MealScannerComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   protected auth = inject(AuthService);
+  protected beeper = inject(BeepService);
   private scanner: Html5Qrcode | null = null;
   private readonly regionId = 'meal-qr-reader';
 
@@ -61,6 +63,7 @@ export class MealScannerComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadTally();
+    this.beeper.warmUp();
     this.start();
   }
 
@@ -129,7 +132,10 @@ export class MealScannerComponent implements OnInit, OnDestroy {
   submitBarcode(): void {
     const v = this.barcodeValue.trim();
     this.barcodeValue = '';
-    if (v) this.redeem(v);
+    if (v) {
+      this.beeper.beep(); // code read
+      this.redeem(v);
+    }
     this.focusBarcode();
   }
   onBarcodeBlur(): void {
@@ -143,6 +149,7 @@ export class MealScannerComponent implements OnInit, OnDestroy {
     if (this.busy || decoded === this.lastCode) return;
     this.busy = true;
     this.lastCode = decoded;
+    this.beeper.beep(); // QR read
     this.redeem(decoded);
   }
 

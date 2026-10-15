@@ -11,6 +11,7 @@ import {
   CheckInResult,
   ClaimKitResult,
   ConfirmResult,
+  CancelRegistrationsResult,
   ContactDto,
   DashboardSummary,
   EventChapterBreakdown,
@@ -247,6 +248,14 @@ export class ApiService {
   attendance(eventId: number): Observable<AttendeeDto[]> {
     return this.http.get<AttendeeDto[]>(this.url(`/api/events/${eventId}/attendance`));
   }
+  // Admin: remove pending registrations (confirmed / checked-in ones are skipped server-side).
+  cancelRegistrations(eventId: number, registrationIds: number[]): Observable<CancelRegistrationsResult> {
+    return this.http.post<CancelRegistrationsResult>(
+      this.url(`/api/events/${eventId}/attendance/cancel`),
+      { registrationIds },
+    );
+  }
+
   confirmRegistrations(eventId: number, registrationIds: number[]): Observable<ConfirmResult> {
     return this.http.post<ConfirmResult>(this.url(`/api/events/${eventId}/attendance/confirm`), {
       registrationIds,

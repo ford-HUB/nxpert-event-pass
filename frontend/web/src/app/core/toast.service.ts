@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { MatSnackBar, MatSnackBarConfig } from '@angular/material/snack-bar';
+import { AlertTone } from '../shared/alert/alert-tones';
+import { ToastComponent, ToastData } from '../shared/alert/toast';
 
-export type ToastType = 'success' | 'error' | 'info' | 'warning';
+export type ToastType = AlertTone;
 
 /**
  * Central place for every user-facing message in the app. Wraps MatSnackBar so
@@ -56,12 +58,13 @@ export class ToastService {
     this.lastAt = now;
     if (type === 'error') this.lastErrorAt = now;
 
-    const config: MatSnackBarConfig = {
-      duration,
+    // No snack-bar duration: ToastComponent runs its own timer so hovering can pause it.
+    const config: MatSnackBarConfig<ToastData> = {
+      data: { message: msg, tone: type, duration },
       horizontalPosition: 'right',
       verticalPosition: 'top',
-      panelClass: ['app-toast', `app-toast-${type}`],
+      panelClass: ['app-toast-panel'],
     };
-    this.snack.open(msg, 'Dismiss', config);
+    this.snack.openFromComponent(ToastComponent, config);
   }
 }

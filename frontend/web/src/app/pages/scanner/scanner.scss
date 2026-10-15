@@ -441,3 +441,98 @@
   font-size: clamp(18px, 3vmin, 38px);
   opacity: 0.85;
 }
+
+// Front (selfie) camera: mirror the preview so movement feels natural. Display only — QR / face
+// decoding reads the raw frames, so detection is unaffected.
+.cam-block.mirrored video,
+:host ::ng-deep .cam-block.mirrored #qr-reader video {
+  transform: scaleX(-1);
+}
+
+/* ===== Camera preview size: Small / Medium (original) / Large ===== */
+.size-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.size-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.size-toggle {
+  border-radius: 999px !important;
+  overflow: hidden;
+  --mat-standard-button-toggle-height: 32px;
+  font-size: 13px;
+}
+
+// Desktop / tablet (side-by-side layout).
+@media (min-width: 801px) {
+  // Small: a narrower preview, centred in its column.
+  .cam-block.size-sm:not(.tv-pip) {
+    width: 62%;
+    margin: 0 auto;
+  }
+  // Large: give the camera column more of the row so the preview really grows.
+  .scanner-layout.cam-lg {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+// Phones (stacked layout): the preview height scales instead (Medium = 34vh, the original).
+@media (max-width: 800px) {
+  .cam-block.size-sm:not(.tv-pip) .qr-reader,
+  :host ::ng-deep .cam-block.size-sm:not(.tv-pip) #qr-reader video {
+    max-height: 24vh !important;
+  }
+  .cam-block.size-lg:not(.tv-pip) .qr-reader,
+  :host ::ng-deep .cam-block.size-lg:not(.tv-pip) #qr-reader video {
+    max-height: 52vh !important;
+  }
+}
+
+// TV mode: the corner preview (Medium = 300px, the original).
+.cam-block.tv-pip.size-sm { width: 200px; }
+.cam-block.tv-pip.size-lg { width: 460px; }
+
+@media (max-width: 640px) {
+  .cam-block.tv-pip.size-sm { width: 140px; }
+  .cam-block.tv-pip.size-lg { width: 260px; }
+}
+
+// − / + on the TV corner preview label.
+.pip-size {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.pip-size-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+  &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.32); }
+  &:disabled { opacity: 0.35; cursor: default; }
+}

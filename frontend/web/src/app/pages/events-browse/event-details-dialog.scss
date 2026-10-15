@@ -36,7 +36,7 @@
 }
 
 .registered-note {
-  color: #1967d2;
+  color: #0f766e;
   font-weight: 600;
 }
 
@@ -116,4 +116,6 @@
   margin: 10px 0 0;
   font-size: 14px;
   line-height: 1.55;
+  white-space: pre-wrap; // keep the description formatting as typed
+  overflow-wrap: anywhere;
 }

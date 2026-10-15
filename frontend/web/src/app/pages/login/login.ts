@@ -1,7 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,7 +14,6 @@ import { ToastService } from '../../core/toast.service';
   imports: [
     FormsModule,
     RouterLink,
-    MatCardModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
@@ -23,6 +21,7 @@ import { ToastService } from '../../core/toast.service';
     MatProgressBarModule,
   ],
   templateUrl: './login.html',
+  styleUrl: './login.scss',
 })
 export class LoginComponent {
   private auth = inject(AuthService);
@@ -46,7 +45,7 @@ export class LoginComponent {
         } else if (this.auth.isMerchant()) {
           this.router.navigate(['/merchant/scan']);
         } else {
-          this.router.navigate([this.auth.isAdmin() ? '/admin/dashboard' : '/my-events']);
+          this.router.navigate(['/home']);
         }
       },
       error: (err) => {

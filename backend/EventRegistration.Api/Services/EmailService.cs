@@ -16,6 +16,9 @@ public class EmailSettings
     public string FromAddress { get; set; } = "";
 }
 
+// A file attached to an email (e.g. a calendar invite: "invite.ics", "text/calendar; method=REQUEST").
+public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType);
+
 public class EmailService
 {
     private readonly EmailSettings _s;
@@ -31,6 +34,10 @@ public class EmailService
         _outboxDir = Path.Combine(env.ContentRootPath, "outbox");
     }
 
+    // Sender identity — also used as the ORGANIZER of calendar invites.
+    public string FromName => _s.FromName;
+    public string FromAddress => string.IsNullOrWhiteSpace(_s.FromAddress) ? _s.User : _s.FromAddress;
+
     /// <summary>
     /// Sends an HTML email. Optionally embeds a PNG as an inline (CID) image referenced
     /// in the HTML as &lt;img src="cid:qrcode"&gt;. When SMTP is disabled, writes the
@@ -38,7 +45,8 @@ public class EmailService
     /// </summary>
     public async Task SendAsync(string toEmail, string subject, string htmlBody,
         byte[]? inlineQrPng = null, string cid = "qrcode",
-        IReadOnlyDictionary<string, byte[]>? inlineImages = null)
+        IReadOnlyDictionary<string, byte[]>? inlineImages = null,
+        IReadOnlyList<EmailAttachment>? attachments = null)
     {
         var msg = new MimeMessage();
         msg.From.Add(new MailboxAddress(_s.FromName,
@@ -68,13 +76,15 @@ public class EmailService
         if (inlineImages is not null)
             foreach (var kv in inlineImages)
                 AddInline(kv.Key, kv.Value);
+        foreach (var a in attachments ?? Array.Empty<EmailAttachment>())
+            builder.Attachments.Add(a.FileName, a.Content, ContentType.Parse(a.ContentType));
         msg.Body = builder.ToMessageBody();
 
         var ccHeader = msg.Cc.Mailboxes.Select(m => m.Address).ToList();
 
         if (!_s.Enabled)
         {
-            await WriteToOutboxAsync(toEmail, ccHeader, subject, htmlBody, inlineQrPng, inlineImages);
+            await WriteToOutboxAsync(toEmail, ccHeader, subject, htmlBody, inlineQrPng, inlineImages, attachments);
             _log.LogWarning("Email SMTP disabled. Wrote message for {To} ('{Subject}') to outbox.", toEmail, subject);
             return;
         }
@@ -92,12 +102,13 @@ public class EmailService
         catch (Exception ex)
         {
             _log.LogError(ex, "Failed to send email to {To}. Falling back to outbox.", toEmail);
-            await WriteToOutboxAsync(toEmail, ccHeader, subject, htmlBody, inlineQrPng, inlineImages);
+            await WriteToOutboxAsync(toEmail, ccHeader, subject, htmlBody, inlineQrPng, inlineImages, attachments);
         }
     }
 
     private async Task WriteToOutboxAsync(string toEmail, List<string> cc, string subject, string htmlBody,
-        byte[]? qr, IReadOnlyDictionary<string, byte[]>? inlineImages = null)
+        byte[]? qr, IReadOnlyDictionary<string, byte[]>? inlineImages = null,
+        IReadOnlyList<EmailAttachment>? attachments = null)
     {
         Directory.CreateDirectory(_outboxDir);
         var safe = string.Join("_", subject.Split(Path.GetInvalidFileNameChars()));
@@ -119,6 +130,8 @@ public class EmailService
                 html = html.Replace($"cid:{kv.Key}", file);
             }
         }
+        foreach (var a in attachments ?? Array.Empty<EmailAttachment>())
+            await File.WriteAllBytesAsync(Path.Combine(_outboxDir, $"{baseName}.{a.FileName}"), a.Content);
         var ccPart = cc.Count > 0 ? $" | Cc: {string.Join(", ", cc)}" : "";
         var header = $"<!-- To: {toEmail}{ccPart} | Subject: {subject} -->\n";
         await File.WriteAllTextAsync(Path.Combine(_outboxDir, $"{baseName}.html"), header + html);

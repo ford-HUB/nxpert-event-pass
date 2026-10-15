@@ -2,6 +2,12 @@
   <mat-icon color="primary">restaurant</mat-icon>
   <h1>Meal Stub Scanner</h1>
   <span class="spacer"></span>
+  <button mat-stroked-button (click)="beeper.toggleMute()"
+          [attr.aria-pressed]="!beeper.muted()"
+          [attr.aria-label]="beeper.muted() ? 'Turn scan beep on' : 'Turn scan beep off'">
+    <mat-icon>{{ beeper.muted() ? 'volume_off' : 'volume_up' }}</mat-icon>
+    {{ beeper.muted() ? 'Sound off' : 'Sound on' }}
+  </button>
   <span class="count-chip" title="Total meal stubs you have redeemed, across all sessions">
     <mat-icon class="inline-icon">redeem</mat-icon>
     {{ redeemedCount() }} redeemed@if (redeemedValue()) { · ₱{{ redeemedValue() | number }} }

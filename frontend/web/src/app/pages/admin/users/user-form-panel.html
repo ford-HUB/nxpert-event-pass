@@ -1,0 +1,145 @@
+<div class="panel-head">
+  <span class="panel-title">
+    <mat-icon>{{ isEdit ? 'badge' : 'person_add' }}</mat-icon>
+    {{ isEdit ? user()!.fullName : 'New user' }}
+  </span>
+  @if (isEdit) {
+    <span class="mode-pill">Editing</span>
+  } @else {
+    <span class="mode-pill new">New record</span>
+  }
+</div>
+
+<form #f="ngForm" class="uf" (ngSubmit)="save()" autocomplete="off">
+  <!-- Photo -->
+  <div class="uf-photo span-2">
+    <div class="uf-avatar">
+      @if (previewPhoto()) {
+        <img [src]="previewPhoto()" alt="Profile photo" />
+      } @else {
+        <mat-icon>person</mat-icon>
+      }
+    </div>
+    <div class="uf-photo-actions">
+      <span class="uf-label">Profile photo</span>
+      <div class="uf-btns">
+        <button type="button" mat-stroked-button (click)="photoInput.click()">
+          <mat-icon>photo_camera</mat-icon> {{ previewPhoto() ? 'Change' : 'Upload' }}
+        </button>
+        @if (previewPhoto()) {
+          <button type="button" mat-button (click)="removePhoto()">Remove</button>
+        }
+      </div>
+      @if (photoError()) { <span class="error-text">{{ photoError() }}</span> }
+    </div>
+    <input #photoInput type="file" accept="image/*" hidden (change)="onPhotoSelected($event)" />
+  </div>
+
+  <mat-form-field appearance="outline">
+    <mat-label>First name</mat-label>
+    <input matInput name="firstName" [(ngModel)]="firstName" required maxlength="100" />
+    @if (!firstName.trim()) { <mat-icon matSuffix class="req" matTooltip="Required">error</mat-icon> }
+  </mat-form-field>
+
+  <div class="uf-pair">
+    <mat-form-field appearance="outline" class="mi">
+      <mat-label>M.I.</mat-label>
+      <input matInput name="middleInitial" [(ngModel)]="middleInitial" maxlength="5" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Last name</mat-label>
+      <input matInput name="lastName" [(ngModel)]="lastName" required maxlength="100" />
+      @if (!lastName.trim()) { <mat-icon matSuffix class="req" matTooltip="Required">error</mat-icon> }
+    </mat-form-field>
+  </div>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Email</mat-label>
+    <input matInput type="email" name="email" [(ngModel)]="email" required maxlength="256" />
+    @if (!email.trim()) { <mat-icon matSuffix class="req" matTooltip="Required">error</mat-icon> }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Username</mat-label>
+    <input matInput name="username" [(ngModel)]="username" maxlength="100"
+           placeholder="Auto-generated if blank" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>{{ isEdit ? 'New password' : 'Password' }}</mat-label>
+    <input matInput type="password" name="password" [(ngModel)]="password"
+           [required]="!isEdit" minlength="8" autocomplete="new-password"
+           [placeholder]="isEdit ? 'Leave blank to keep' : 'At least 8 characters'" />
+    @if (!isEdit && !password) { <mat-icon matSuffix class="req" matTooltip="Required">error</mat-icon> }
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Role</mat-label>
+    <mat-select name="role" [(ngModel)]="role">
+      <mat-option value="Participant">Participant</mat-option>
+      <mat-option value="Admin">Admin</mat-option>
+      <mat-option value="Merchant">Merchant</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>ID No.</mat-label>
+    <input matInput name="senateNo" [(ngModel)]="senateNo" maxlength="50" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Designation</mat-label>
+    <input matInput name="level" [(ngModel)]="level" maxlength="100" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="span-2">
+    <mat-label>Chapter</mat-label>
+    <input matInput name="organization" [(ngModel)]="organization" maxlength="200" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Send pass via</mat-label>
+    <mat-select name="notificationChannel" [(ngModel)]="notificationChannel">
+      <mat-option value="Email">Email</mat-option>
+      <mat-option value="Viber">Viber</mat-option>
+      <mat-option value="Both">Both (Email &amp; Viber)</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Phone</mat-label>
+    <input matInput name="phone" [(ngModel)]="phone" #phoneModel="ngModel"
+           (input)="onPhoneInput($event)" inputmode="tel" maxlength="16"
+           placeholder="+63 000 000 0000"
+           pattern="\+63 \d{3} \d{3} \d{4}" [required]="phoneRequired()" />
+    @if (phoneRequired() && !phone) { <mat-icon matSuffix class="req" matTooltip="Required for Viber">error</mat-icon> }
+    @if (phoneModel.hasError('pattern')) {
+      <mat-error>Use +63 000 000 0000.</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="uf-checks span-2">
+    <mat-checkbox name="canConfirm" [(ngModel)]="canConfirmRegistrations">
+      Can confirm registrations
+    </mat-checkbox>
+
+    <div class="uf-face">
+      <span class="uf-label">
+        Facial registration:
+        @if (faceRegistered()) {
+          <span class="face-ok"><mat-icon class="inline-icon">verified_user</mat-icon> Registered</span>
+        } @else {
+          <span class="muted">not registered</span>
+        }
+      </span>
+      <div class="uf-btns">
+        <button type="button" mat-stroked-button (click)="registerFace()">
+          <mat-icon>face</mat-icon> {{ faceRegistered() ? 'Re-capture' : 'Register face' }}
+        </button>
+        @if (faceRegistered()) {
+          <button type="button" mat-button (click)="removeFace()">Remove</button>
+        }
+      </div>
+    </div>
+  </div>
+</form>

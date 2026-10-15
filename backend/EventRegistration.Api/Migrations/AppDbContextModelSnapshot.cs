@@ -71,8 +71,20 @@ namespace EventRegistration.Api.Migrations
                     b.Property<string>("FormSchema")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<int>("InviteSequence")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsPublicLinkEnabled")
                         .HasColumnType("bit");
+
+                    b.Property<string>("MeetingUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<bool>("NotifyOnKitClaim")
                         .HasColumnType("bit");
@@ -458,6 +470,10 @@ namespace EventRegistration.Api.Migrations
 
                     b.Property<int>("EventId")
                         .HasColumnType("int");
+
+                    b.Property<string>("MeetingUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<string>("PosterImage")
                         .HasColumnType("nvarchar(max)");
