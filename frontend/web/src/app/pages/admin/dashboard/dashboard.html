@@ -173,4 +173,57 @@
       }
     </mat-card> -->
   }
+
+  <!-- Registrations per sub-event (same selected event) -->
+  @if (events().length > 0) {
+    @if (subLoading()) {
+      <div class="empty-state"><mat-spinner diameter="32"></mat-spinner></div>
+    } @else {
+      <mat-card class="chapter-card kit-card">
+        <mat-card-header class="collapse-head" (click)="subChartOpen.set(!subChartOpen())"
+                         role="button" tabindex="0"
+                         (keydown.enter)="subChartOpen.set(!subChartOpen())"
+                         (keydown.space)="subChartOpen.set(!subChartOpen()); $event.preventDefault()">
+          <div class="collapse-titles">
+            <mat-card-title>Registrations per sub-event</mat-card-title>
+            <mat-card-subtitle>
+              {{ subTotal() }} sub-event registration{{ subTotal() === 1 ? '' : 's' }}
+            </mat-card-subtitle>
+          </div>
+          <button mat-icon-button class="collapse-toggle" type="button"
+                  [attr.aria-label]="subChartOpen() ? 'Collapse' : 'Expand'"
+                  [attr.aria-expanded]="subChartOpen()" (click)="$event.stopPropagation(); subChartOpen.set(!subChartOpen())">
+            <mat-icon>{{ subChartOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          </button>
+        </mat-card-header>
+        @if (subChartOpen()) {
+        <mat-card-content>
+          @if (!subEvents() || subEvents()!.subEvents.length === 0) {
+            <p class="muted">This event has no sub-events.</p>
+          } @else {
+            @for (grp of subEventDays(); track grp.day) {
+              <p class="sub-day-label">{{ grp.startsAt | date: 'EEE, MMM d' }}</p>
+              @for (s of grp.items; track s.sessionId) {
+                <div class="chapter-row" [class.zero]="s.count === 0">
+                  <div class="chapter-line">
+                    <span class="chapter-name">{{ s.title }}</span>
+                    <span class="chapter-pct">
+                      {{ s.count }}@if (s.capacity) { / {{ s.capacity }} · {{ subPct(s) }}% }
+                      @if (subFull(s)) { <span class="full-tag">FULL</span> }
+                    </span>
+                  </div>
+                  <div class="chapter-track">
+                    <div class="chapter-fill"
+                         [style.width.%]="subBarWidth(s.count)"
+                         [style.background]="chapterColor(s.title)"></div>
+                  </div>
+                </div>
+              }
+            }
+          }
+        </mat-card-content>
+        }
+      </mat-card>
+    }
+  }
 }

@@ -81,6 +81,7 @@ public class RegistrationsController : ControllerBase
 
         reg.FormResponses = FormJson.WriteResponses(req.Responses);
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(reg.EventId, new[] { reg.Id });
         return Ok(new { message = "Your responses were updated." });
     }
 
@@ -143,6 +144,7 @@ public class RegistrationsController : ControllerBase
         foreach (var s in siblings) s.FormResponses = json;
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(reg.EventId, siblings.Select(s => s.Id));
         return Ok(new { message = "Your response was updated." });
     }
 
@@ -260,6 +262,7 @@ public class RegistrationsController : ControllerBase
 
         var responsesJson = FormJson.WriteResponses(req.Responses);
         int created = 0, already = 0;
+        var added = new List<Registration>();
         foreach (var sid in targets)
         {
             if (await _db.Registrations.AnyAsync(r => r.EventId == ev.Id && r.SessionId == sid && r.UserId == uid))
@@ -270,7 +273,7 @@ public class RegistrationsController : ControllerBase
             var blocked = await RegistrationBlockedReason(ev, sid);
             if (blocked is not null) return StatusCode(403, new { message = blocked });
 
-            _db.Registrations.Add(new Registration
+            var reg = new Registration
             {
                 EventId = ev.Id,
                 SessionId = sid,
@@ -278,7 +281,9 @@ public class RegistrationsController : ControllerBase
                 Token = Guid.NewGuid(),
                 RegisteredAt = DateTime.Now,
                 FormResponses = responsesJson,
-            });
+            };
+            _db.Registrations.Add(reg);
+            added.Add(reg);
             created++;
         }
 
@@ -289,6 +294,9 @@ public class RegistrationsController : ControllerBase
         if (created > 0)
             await _notify.NewRegistrationAsync(new NewRegistrationNotice(
                 ev.Id, ev.Title, user.FullName, SingleSessionTitle(ev, targets), created, false, DateTime.Now));
+        // Realtime: push the new rows so an open Attendance tab appends them in place.
+        await _notify.AttendeesChangedAsync(ev.Id, added.Select(r => r.Id));
+        if (created > 0) await _notify.FaceGalleryChangedAsync(ev.Id);
 
         // No pass is issued here — registrations stay pending until an admin confirms them.
         var editToken = await EditTokenForAsync(ev, uid, null);
@@ -386,6 +394,7 @@ public class RegistrationsController : ControllerBase
 
         var responsesJson = FormJson.WriteResponses(req.Responses);
         int created = 0, already = 0;
+        var added = new List<Registration>();
         foreach (var sid in targets)
         {
             // The member (Senate No.) is the key: a repeat submission for the same member + sub-event
@@ -397,7 +406,7 @@ public class RegistrationsController : ControllerBase
             var blocked = await RegistrationBlockedReason(ev, sid);
             if (blocked is not null) return StatusCode(403, new { message = blocked });
 
-            _db.Registrations.Add(new Registration
+            var reg = new Registration
             {
                 EventId = ev.Id,
                 SessionId = sid,
@@ -412,7 +421,9 @@ public class RegistrationsController : ControllerBase
                 FormResponses = responsesJson,
                 FaceDescriptor = face,
                 GuestPhoto = displayPicture,
-            });
+            };
+            _db.Registrations.Add(reg);
+            added.Add(reg);
             created++;
         }
 
@@ -427,6 +438,8 @@ public class RegistrationsController : ControllerBase
         if (created > 0)
             await _notify.NewRegistrationAsync(new NewRegistrationNotice(
                 ev.Id, ev.Title, req.FullName.Trim(), SingleSessionTitle(ev, targets), created, true, DateTime.Now));
+        await _notify.AttendeesChangedAsync(ev.Id, added.Select(r => r.Id));
+        if (created > 0) await _notify.FaceGalleryChangedAsync(ev.Id);
 
         // Registrations are pending confirmation — the pass is emailed only after an admin confirms.
         var editToken = await EditTokenForAsync(ev, null, senate);
@@ -483,6 +496,8 @@ public class RegistrationsController : ControllerBase
 
         _db.Registrations.Remove(reg);
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(reg.EventId, Array.Empty<int>(), new[] { reg.Id });
+        await _notify.FaceGalleryChangedAsync(reg.EventId);
 
         // A confirmed online / hybrid registration had a calendar invite — withdraw it.
         if (reg.Event is not null && EventFormats.HasOnline(reg.Event.Format))
@@ -503,6 +518,7 @@ public class RegistrationsController : ControllerBase
         if (ev is null) return NotFound(new { message = "Event not found." });
 
         int created = 0, skipped = 0;
+        var added = new List<Registration>();
         foreach (var item in req.Items ?? new())
         {
             if (string.IsNullOrWhiteSpace(item.FullName)) { skipped++; continue; }
@@ -528,7 +544,7 @@ public class RegistrationsController : ControllerBase
                     r => r.EventId == ev.Id && r.SessionId == sid && r.GuestSenateNo == senate);
                 if (existing is not null) { skipped++; continue; }
 
-                _db.Registrations.Add(new Registration
+                var reg = new Registration
                 {
                     EventId = ev.Id,
                     SessionId = sid,
@@ -543,11 +559,15 @@ public class RegistrationsController : ControllerBase
                     FormResponses = responsesJson,
                     FaceDescriptor = face,
                     GuestPhoto = string.IsNullOrWhiteSpace(item.DisplayPicture) ? null : item.DisplayPicture,
-                });
+                };
+                _db.Registrations.Add(reg);
+                added.Add(reg);
                 created++;
             }
         }
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(ev.Id, added.Select(r => r.Id));
+        if (created > 0) await _notify.FaceGalleryChangedAsync(ev.Id);
         return Ok(new OfflineRegSyncResult(created, skipped));
     }
 

@@ -390,10 +390,15 @@ the camera**, and only after the **same person is recognised on several frames i
 
 ### TV / presentation mode
 
-**TV mode** shows a full-screen welcome display for a screen at the door: on each check-in it
-shows the greeting, the member's name, photo, ID No., designation and chapter. The camera keeps
-running in a small corner preview — use its **−** / **+** buttons to resize it. **Exit TV mode**
-to return.
+**TV mode** (scanner header) opens the door TV: the face recognition engine's camera checks
+people in and the screen shows each person's name, photo and result, with the attendee list on
+the right. Choose what the camera checks in with — **QR** (passes), **Face**, or **Auto** (both);
+the choice is remembered on that device. **Fullscreen** hides the attendee list and the buttons
+(press **Esc** to get them back); **Exit** returns to the scanner.
+
+- The TV and the browser scanner share the webcam: the TV takes it when opened and gives it back
+  on **Exit**. Don't run both at once on one computer.
+- Check-ins still follow the normal rules: only confirmed passes, only during the event.
 
 ### Offline check-in
 
@@ -435,7 +440,7 @@ Merchant accounts see only the **Meal Stub Scanner**:
 | I changed the meeting time — do I need to tell people? | No. Confirmed registrants get an updated calendar invite automatically. |
 | Face check-in recognised the wrong person | Ask them to face the camera; use the front camera; re-capture the person's face in **Users**. |
 | The scanner doesn't beep | Tap the page once (browsers need a tap before playing sound) and check **Sound on**. |
-| The camera preview is too small / big | Use **Preview size** (or **−/+** in TV mode). |
+| The camera preview is too small / big | Use **Preview size**. |
 | I want someone to help confirm without being an admin | **Users** → select them → tick **Can confirm registrations** → **Save**. |
 | A participant didn't get the invitation | Ask them to check spam; re-send, or share the public link. |
 | The scanner camera won't open | The site must be served over **HTTPS** (or localhost). |

@@ -118,6 +118,9 @@ namespace EventRegistration.Api.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<bool>("VerifyOnly")
+                        .HasColumnType("bit");
+
                     b.Property<string>("WelcomeMessage")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -194,10 +197,10 @@ namespace EventRegistration.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EventId");
-
                     b.HasIndex("Token")
                         .IsUnique();
+
+                    b.HasIndex("EventId", "Email");
 
                     b.ToTable("Invitations");
                 });
@@ -443,6 +446,11 @@ namespace EventRegistration.Api.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("EventId", "SessionId", "GuestSenateNo")
+                        .HasDatabaseName("IX_Registrations_Event_Attendance");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("EventId", "SessionId", "GuestSenateNo"), new[] { "ConfirmedAt", "CheckedInAt" });
 
                     b.HasIndex("EventId", "SessionId", "UserId")
                         .IsUnique()

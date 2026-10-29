@@ -48,45 +48,6 @@
   min-height: 240px;
 }
 
-/* TV mode: float the live camera as a corner picture-in-picture, above the welcome
-   overlay, so the operator can check the camera is aimed correctly. */
-.cam-block.tv-pip {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  width: 300px;
-  z-index: 1100;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #000;
-  border: 2px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.5);
-}
-
-.cam-block.tv-pip .qr-reader {
-  min-height: 0;
-  border-radius: 0;
-}
-
-.cam-pip-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-@media (max-width: 640px) {
-  .cam-block.tv-pip {
-    width: 190px;
-    right: 12px;
-    bottom: 12px;
-  }
-}
-
 :host ::ng-deep #qr-reader video {
   width: 100% !important;
   border-radius: 12px;
@@ -94,17 +55,16 @@
 
 /* Mobile (stacked layout): keep the live camera preview compact so the result/response banner
    below it is fully visible without scrolling. object-fit: cover crops the shorter preview
-   rather than squashing it — the full camera frame is still scanned underneath. TV-mode PiP is
-   fixed-position and explicitly excluded. */
+   rather than squashing it — the full camera frame is still scanned underneath. */
 @media (max-width: 800px) {
-  .cam-block:not(.tv-pip) .qr-reader {
+  .cam-block .qr-reader {
     min-height: 0;
     max-height: 34vh;
   }
-  .cam-block:not(.tv-pip) video.qr-reader {
+  .cam-block video.qr-reader {
     object-fit: cover;
   }
-  :host ::ng-deep .cam-block:not(.tv-pip) #qr-reader video {
+  :host ::ng-deep .cam-block #qr-reader video {
     max-height: 34vh !important;
     object-fit: cover;
   }
@@ -249,6 +209,10 @@
   background: #1e8e3e;
 }
 
+.banner-verified {
+  background: #1a73e8;
+}
+
 .banner-already,
 .banner-notstarted,
 .banner-unconfirmed,
@@ -313,135 +277,6 @@
   font-weight: 600;
 }
 
-/* ---- TV / presentation mode: full-screen welcome display ---- */
-.tv-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 5vmin;
-  color: #fff;
-  background: #1a1a2e;
-  animation: tv-fade 0.25s ease;
-}
-
-@keyframes tv-fade {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* TV standby hero: the event banner shown large between scans. Only max dimensions are set, so
-   the image keeps its own aspect ratio (square stays square) with no cropping or distortion. */
-.tv-banner-img {
-  max-width: min(72vw, 900px);
-  max-height: 42vh;
-  border-radius: 16px;
-  margin-bottom: 24px;
-  object-fit: contain;
-}
-
-.tv-overlay.tv-valid { background: linear-gradient(160deg, #1e8e3e, #12692c); }
-.tv-overlay.tv-already { background: linear-gradient(160deg, #f9ab00, #d98e00); }
-.tv-overlay.tv-unconfirmed { background: linear-gradient(160deg, #f9ab00, #d98e00); }
-.tv-overlay.tv-notreg { background: linear-gradient(160deg, #f9ab00, #d98e00); }
-.tv-overlay.tv-notstarted { background: linear-gradient(160deg, #5f6368, #3c4043); }
-.tv-overlay.tv-ended { background: linear-gradient(160deg, #5f6368, #3c4043); }
-.tv-overlay.tv-invalid,
-.tv-overlay.tv-error,
-.tv-overlay.tv-nomatch { background: linear-gradient(160deg, #d93025, #a52218); }
-
-.tv-exit {
-  position: absolute;
-  top: 3vmin;
-  right: 3vmin;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.tv-icon {
-  font-size: clamp(64px, 12vmin, 160px);
-  width: clamp(64px, 12vmin, 160px);
-  height: clamp(64px, 12vmin, 160px);
-  margin-bottom: 2vmin;
-}
-
-.tv-icon.idle { opacity: 0.85; }
-
-.tv-photo {
-  width: clamp(120px, 22vmin, 320px);
-  height: clamp(120px, 22vmin, 320px);
-  border-radius: 50%;
-  object-fit: cover;
-  border: 0.8vmin solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-  margin-bottom: 2vmin;
-}
-
-.tv-kicker {
-  margin: 0;
-  font-size: clamp(20px, 3.5vmin, 44px);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  opacity: 0.9;
-}
-
-.tv-name {
-  margin: 1vmin 0;
-  font-size: clamp(40px, 9vmin, 140px);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-}
-
-.tv-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 1.5vmin;
-  margin: 2vmin 0;
-}
-
-.tv-chip {
-  padding: 1vmin 3vmin;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: clamp(18px, 3vmin, 40px);
-  font-weight: 600;
-}
-
-.tv-event {
-  margin: 1vmin 0;
-  font-size: clamp(20px, 3.5vmin, 48px);
-  opacity: 0.92;
-}
-
-.tv-status {
-  margin-top: 3vmin;
-  display: inline-flex;
-  align-items: center;
-  gap: 1vmin;
-  font-size: clamp(22px, 4vmin, 52px);
-  font-weight: 700;
-}
-
-.tv-status .inline-icon {
-  font-size: clamp(24px, 4.5vmin, 56px);
-  width: clamp(24px, 4.5vmin, 56px);
-  height: clamp(24px, 4.5vmin, 56px);
-}
-
-.tv-count {
-  margin-top: 4vmin;
-  display: inline-flex;
-  align-items: center;
-  gap: 1vmin;
-  font-size: clamp(18px, 3vmin, 38px);
-  opacity: 0.85;
-}
-
 // Front (selfie) camera: mirror the preview so movement feels natural. Display only — QR / face
 // decoding reads the raw frames, so detection is unaffected.
 .cam-block.mirrored video,
@@ -478,7 +313,7 @@
 // Desktop / tablet (side-by-side layout).
 @media (min-width: 801px) {
   // Small: a narrower preview, centred in its column.
-  .cam-block.size-sm:not(.tv-pip) {
+  .cam-block.size-sm {
     width: 62%;
     margin: 0 auto;
   }
@@ -490,49 +325,35 @@
 
 // Phones (stacked layout): the preview height scales instead (Medium = 34vh, the original).
 @media (max-width: 800px) {
-  .cam-block.size-sm:not(.tv-pip) .qr-reader,
-  :host ::ng-deep .cam-block.size-sm:not(.tv-pip) #qr-reader video {
+  .cam-block.size-sm .qr-reader,
+  :host ::ng-deep .cam-block.size-sm #qr-reader video {
     max-height: 24vh !important;
   }
-  .cam-block.size-lg:not(.tv-pip) .qr-reader,
-  :host ::ng-deep .cam-block.size-lg:not(.tv-pip) #qr-reader video {
+  .cam-block.size-lg .qr-reader,
+  :host ::ng-deep .cam-block.size-lg #qr-reader video {
     max-height: 52vh !important;
   }
 }
 
-// TV mode: the corner preview (Medium = 300px, the original).
-.cam-block.tv-pip.size-sm { width: 200px; }
-.cam-block.tv-pip.size-lg { width: 460px; }
-
-@media (max-width: 640px) {
-  .cam-block.tv-pip.size-sm { width: 140px; }
-  .cam-block.tv-pip.size-lg { width: 260px; }
+/* Verify-only switch and sub-event picker (check-in action). */
+.verify-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 4px 0 12px;
 }
 
-// − / + on the TV corner preview label.
-.pip-size {
-  margin-left: auto;
+.verify-count {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
+  color: #1a73e8;
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.pip-size-btn {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  cursor: pointer;
-
-  mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-  }
-  &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.32); }
-  &:disabled { opacity: 0.35; cursor: default; }
+.session-select {
+  width: 100%;
+  margin-bottom: 12px;
 }

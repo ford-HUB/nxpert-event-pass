@@ -14,7 +14,13 @@ namespace EventRegistration.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public UsersController(AppDbContext db) => _db = db;
+    private readonly NotificationService _notify;
+
+    public UsersController(AppDbContext db, NotificationService notify)
+    {
+        _db = db;
+        _notify = notify;
+    }
 
     private static readonly string[] AssignableRoles = { Roles.Admin, Roles.Participant, Roles.Merchant };
 
@@ -340,12 +346,18 @@ public class UsersController : ControllerBase
         user.Organization = string.IsNullOrWhiteSpace(req.Organization) ? null : req.Organization.Trim();
         user.Phone = phone;
         user.NotificationChannel = channel;
+        var photoChanged = false;
         if (req.Photo is not null) // null = leave unchanged; "" = clear
-            user.PhotoUrl = req.Photo.Length == 0 ? null : req.Photo;
+        {
+            var photo = req.Photo.Length == 0 ? null : req.Photo;
+            photoChanged = photo != user.PhotoUrl;
+            user.PhotoUrl = photo;
+        }
         if (req.Face is not null) // null = leave unchanged; "" = clear the face registration
             user.FaceDescriptor = req.Face.Length == 0 ? null : req.Face;
         user.CanConfirmRegistrations = req.CanConfirmRegistrations;
         await _db.SaveChangesAsync();
+        if (photoChanged) await _notify.UserPhotoChangedAsync(user.Id);
         return Ok(ToDto(user, includePhoto: true));
     }
 

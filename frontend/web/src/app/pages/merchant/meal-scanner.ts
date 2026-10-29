@@ -100,7 +100,8 @@ export class MealScannerComponent implements OnInit, OnDestroy {
       await this.scanner.start(
         { facingMode: 'environment' },
         {
-          fps: 10,
+          fps: 30,
+          videoConstraints: { facingMode: 'environment', frameRate: { ideal: 30 } },
           qrbox: (vw: number, vh: number) => {
             const s = Math.max(120, Math.floor(Math.min(vw, vh) * 0.8));
             return { width: s, height: s };

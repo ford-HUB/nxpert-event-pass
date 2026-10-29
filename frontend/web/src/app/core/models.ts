@@ -53,6 +53,19 @@ export interface RegistrationFace {
 }
 
 // ---- Realtime notifications (pushed over the SignalR hub) ----
+// Pushed whenever Attendance rows change (registered, confirmed, checked in, kit/meal claimed,
+// answers edited) or are cancelled, so an open grid patches itself in place. Rows are upserted
+// by registrationId; removedIds are dropped.
+export interface AttendeesChangedNotice {
+  eventId: number;
+  attendees: AttendeeDto[];
+  removedIds: number[];
+}
+
+export interface FaceGalleryChangedNotice {
+  eventId: number;
+}
+
 export interface NewRegistrationNotice {
   eventId: number;
   eventTitle: string;
@@ -101,6 +114,7 @@ export interface OfflineEvent {
   status: string;
   isPublicLinkEnabled: boolean;
   bannerImage: string | null;
+  verifyOnly?: boolean; // missing in bundles downloaded before verify-only existed
 }
 export interface OfflineSession {
   id: number;
@@ -362,6 +376,12 @@ export interface EventDto {
   meals: MealDto[]; // event-level (per-day) meal stubs (no-sub-event events)
   format: EventFormat;
   meetingUrl?: string | null; // admin responses only — never sent to public / browse callers
+  verifyOnly: boolean; // scanners verify passes but record no check-ins
+}
+
+export interface VerifyOnlyChangedNotice {
+  eventId: number;
+  enabled: boolean;
 }
 
 export interface EventUpsert {
@@ -431,9 +451,17 @@ export interface PublicRegistrationForm {
   lockReason: string | null;
 }
 
+// Scanner options for a check-in: limit it to a sub-event, or only verify the pass.
+export interface CheckInOptions {
+  eventId?: number;
+  sessionId?: number | null;
+  verify?: boolean;
+}
+
 export interface CheckInResult {
   // 'error' is a client-only status the offline path uses when no bundle is cached; the API never returns it.
-  status: 'valid' | 'already' | 'invalid' | 'unconfirmed' | 'notstarted' | 'ended' | 'error';
+  // 'verified' answers a verify-only scan: the pass is confirmed, but no check-in was recorded.
+  status: 'valid' | 'verified' | 'already' | 'invalid' | 'unconfirmed' | 'notstarted' | 'ended' | 'error';
   fullName: string | null;
   eventTitle: string | null;
   checkedInAt: string | null;
@@ -664,4 +692,19 @@ export interface EventChapterBreakdown {
   totalRegistrations: number;
   totalKitClaimed: number;
   chapters: ChapterCount[];
+}
+
+export interface SubEventCount {
+  sessionId: number;
+  title: string;
+  startsAt: string;
+  count: number;
+  capacity: number | null;
+}
+
+export interface EventSubEventBreakdown {
+  eventId: number;
+  eventTitle: string;
+  totalRegistrations: number;
+  subEvents: SubEventCount[];
 }

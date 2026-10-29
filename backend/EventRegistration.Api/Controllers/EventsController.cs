@@ -90,7 +90,8 @@ public class EventsController : ControllerBase
             e.NotifyOnKitClaim,
             eventMeals,
             EventFormats.Normalize(e.Format),
-            includeMeeting ? e.MeetingUrl : null);
+            includeMeeting ? e.MeetingUrl : null,
+            e.VerifyOnly);
     }
 
     private static MealDto ToMealDto(Meal m) =>
@@ -353,7 +354,7 @@ public class EventsController : ControllerBase
             .ToList();
 
         var ev = new OfflineEventDto(e.Id, e.Title, e.PublicSlug, e.WelcomeMessage, e.StartsAt,
-            e.EndsAt, e.Venue, e.Status, e.IsPublicLinkEnabled, e.BannerImage);
+            e.EndsAt, e.Venue, e.Status, e.IsPublicLinkEnabled, e.BannerImage, e.VerifyOnly);
 
         return Ok(new OfflineBundleDto(ev, sessions, members, registrations,
             FormJson.ReadSchema(e.FormSchema), DateTime.UtcNow));

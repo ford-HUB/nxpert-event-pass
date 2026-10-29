@@ -138,8 +138,10 @@ export class OfflineService {
   }
 
   /** Pick the registration token for a recognized member for today's sub-event. */
-  resolveFaceToken(bundle: OfflineBundle, userId: number): string | null {
-    const regs = bundle.registrations.filter((r) => r.userId === userId);
+  resolveFaceToken(bundle: OfflineBundle, userId: number, sessionId: number | null = null): string | null {
+    const regs = bundle.registrations.filter(
+      (r) => r.userId === userId && (sessionId == null || r.sessionId === sessionId),
+    );
     if (regs.length === 0) return null;
     const today = startOfDay(new Date());
     const inWindow = (r: (typeof regs)[number]) => {
@@ -157,7 +159,11 @@ export class OfflineService {
    * Validate and record a check-in against the cached bundle (no network). Mutates + persists
    * the bundle, queues the check-in for sync, and returns the same shape as the online API.
    */
-  async localCheckIn(eventId: number, rawToken: string): Promise<CheckInResult> {
+  async localCheckIn(
+    eventId: number,
+    rawToken: string,
+    opts: { sessionId?: number | null; verify?: boolean } = {},
+  ): Promise<CheckInResult> {
     const bundle = await this.getBundle(eventId);
     const none = (status: CheckInResult['status'], message: string | null = null, fullName: string | null = null): CheckInResult => ({
       status,
@@ -198,8 +204,12 @@ export class OfflineService {
       sessionTitle: w.title,
     });
 
+    if (opts.sessionId != null && reg.sessionId !== opts.sessionId)
+      return base('invalid', null, `This pass is for ${w.title ?? 'the main event'}, not the selected sub-event.`);
     if (reg.checkedInAt) return base('already', reg.checkedInAt);
     if (!reg.confirmed) return base('unconfirmed', null, "This registration hasn't been confirmed yet.");
+    // Verify only: report the confirmed pass without recording or queuing a check-in.
+    if (opts.verify || bundle.event.verifyOnly) return base('verified', null);
 
     const today = startOfDay(new Date());
     if (today < startOfDay(w.start))

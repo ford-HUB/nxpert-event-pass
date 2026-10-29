@@ -136,6 +136,29 @@ public class DashboardController : ControllerBase
         return Ok(new EventChapterBreakdown(ev.Id, ev.Title, ev.StartsAt, total, totalClaimed, chapters));
     }
 
+    // Registrations per sub-event (session) for one event, ordered chronologically, with each
+    // sub-event's capacity so the dashboard can show how full it is.
+    [HttpGet("subevent-breakdown")]
+    public async Task<ActionResult<EventSubEventBreakdown>> SubEventBreakdown([FromQuery] int eventId)
+    {
+        var ev = await _db.Events.Include(e => e.Sessions).FirstOrDefaultAsync(e => e.Id == eventId);
+        if (ev is null) return NotFound(new { message = "Event not found." });
+
+        // Per-session registration counts computed in SQL.
+        var counts = await _db.Registrations
+            .Where(r => r.EventId == eventId && r.SessionId != null)
+            .GroupBy(r => r.SessionId!.Value)
+            .Select(g => new { SessionId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SessionId, x => x.Count);
+
+        var subs = ev.Sessions
+            .OrderBy(s => s.StartsAt)
+            .Select(s => new SubEventCount(s.Id, s.Title, s.StartsAt, counts.GetValueOrDefault(s.Id), s.Capacity))
+            .ToList();
+
+        return Ok(new EventSubEventBreakdown(ev.Id, ev.Title, subs.Sum(s => s.Count), subs));
+    }
+
     // True when a form field represents the given concept ("chapter"/"organization"), matched
     // case-insensitively against its key or label.
     private static bool IsChapterField(FormFieldDef f, string word) =>

@@ -58,7 +58,7 @@ non-expiring**, and there is **no rate limiting or server-side password policy**
 Two live secrets are checked into the repository:
 - **JWT signing key** = `DEV_ONLY_super_secret_signing_key_change_me_please_32+chars` — a
   low-entropy, human-readable, guessable string.
-- **Gmail App Password** = `dpnlsmcoqqdkihnx` (in cleartext), with the sending account.
+- **Gmail App Password** = `[REDACTED]` (was in cleartext; value intentionally not copied here), with the sending account.
 
 **Impact:** Anyone with the source (or who guesses the key) can **forge valid JWTs for any
 user, including an admin** → full account/administrative takeover (see C-3). The Gmail

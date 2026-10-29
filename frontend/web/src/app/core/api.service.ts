@@ -8,6 +8,7 @@ import {
   MobileProvider,
   AuthResponse,
   AttendeeDto,
+  CheckInOptions,
   CheckInResult,
   ClaimKitResult,
   ConfirmResult,
@@ -15,6 +16,7 @@ import {
   ContactDto,
   DashboardSummary,
   EventChapterBreakdown,
+  EventSubEventBreakdown,
   MealBoardDto,
   MealScanResult,
   MealScanTally,
@@ -232,6 +234,11 @@ export class ApiService {
       this.url(`/api/dashboard/chapter-breakdown?eventId=${eventId}`),
     );
   }
+  subEventBreakdown(eventId: number): Observable<EventSubEventBreakdown> {
+    return this.http.get<EventSubEventBreakdown>(
+      this.url(`/api/dashboard/subevent-breakdown?eventId=${eventId}`),
+    );
+  }
 
   // ---- Contacts + invitations ----
   listContacts(): Observable<ContactDto[]> {
@@ -395,12 +402,22 @@ export class ApiService {
   }
 
   // ---- Check-in ----
-  checkIn(token: string): Observable<CheckInResult> {
-    return this.http.post<CheckInResult>(this.url('/api/checkin'), { token });
+  checkIn(token: string, opts: CheckInOptions = {}): Observable<CheckInResult> {
+    return this.http.post<CheckInResult>(this.url('/api/checkin'), { token, ...opts });
+  }
+  // Switch the event's verify-only mode (applies to every scanner of the event).
+  setVerifyOnly(eventId: number, enabled: boolean): Observable<{ enabled: boolean }> {
+    return this.http.put<{ enabled: boolean }>(this.url(`/api/checkin/events/${eventId}/verify-only`), {
+      enabled,
+    });
   }
   // Facial recognition identified a user → check them in for this event.
-  checkInUser(eventId: number, userId: number): Observable<CheckInResult> {
-    return this.http.post<CheckInResult>(this.url('/api/checkin/user'), { eventId, userId });
+  checkInUser(
+    eventId: number,
+    userId: number,
+    opts: Omit<CheckInOptions, 'eventId'> = {},
+  ): Observable<CheckInResult> {
+    return this.http.post<CheckInResult>(this.url('/api/checkin/user'), { eventId, userId, ...opts });
   }
 
   // ---- User master (admin) ----

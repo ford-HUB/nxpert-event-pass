@@ -16,17 +16,19 @@ public class AttendanceController : ControllerBase
     private readonly AppDbContext _db;
     private readonly PassService _pass;
     private readonly NotificationService _notify;
-    public AttendanceController(AppDbContext db, PassService pass, NotificationService notify)
+    private readonly AttendeeQuery _attendees;
+    public AttendanceController(AppDbContext db, PassService pass, NotificationService notify, AttendeeQuery attendees)
     {
         _db = db;
         _pass = pass;
         _notify = notify;
+        _attendees = attendees;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AttendeeDto>>> List(int eventId)
     {
-        return Ok(await LoadAsync(eventId));
+        return Ok(await _attendees.LoadAsync(eventId));
     }
 
     // ---- Manual check-in: admin marks selected registrations as attended ----
@@ -59,6 +61,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, regs.Select(r => r.Id));
         return Ok(new ManualCheckInResult(checkedIn, already, autoConfirmed));
     }
 
@@ -97,6 +100,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, toNotify.Select(r => r.Id));
 
         // Optional per-event notification: tell each registrant their kit was claimed. Self-claimed
         // sends a generic message (claimer name omitted). Delivery failures don't undo the claim.
@@ -141,6 +145,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, regs.Select(r => r.Id));
         return Ok(new UnclaimKitResult(regs.Count));
     }
 
@@ -186,6 +191,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, regs.Select(r => r.Id));
         return Ok(new RedeemMealsResult(redeemed, already, noMeals, unconfirmed));
     }
 
@@ -212,6 +218,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, regs.Select(r => r.Id));
         return Ok(new UnredeemMealsResult(regs.Count));
     }
 
@@ -534,6 +541,7 @@ public class AttendanceController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, regs.Select(r => r.Id));
 
         foreach (var (uid, notice) in approved)
             await _notify.RegistrationApprovedAsync(uid, notice);
@@ -564,6 +572,8 @@ public class AttendanceController : ControllerBase
 
         _db.Registrations.RemoveRange(pending);
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, Array.Empty<int>(), pending.Select(r => r.Id));
+        await _notify.FaceGalleryChangedAsync(eventId);
         return Ok(new CancelRegistrationsResult(pending.Count, regs.Count - pending.Count));
     }
 
@@ -574,7 +584,7 @@ public class AttendanceController : ControllerBase
         if (ev is null) return NotFound();
 
         var fields = FormJson.ReadSchema(ev.FormSchema);
-        var attendees = await LoadAsync(eventId);
+        var attendees = await _attendees.LoadAsync(eventId);
 
         var sb = new StringBuilder();
         // Base columns + one column per custom form field.
@@ -610,62 +620,6 @@ public class AttendanceController : ControllerBase
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         var fileName = $"attendance-{ev.PublicSlug}.csv";
         return File(bytes, "text/csv", fileName);
-    }
-
-    private async Task<List<AttendeeDto>> LoadAsync(int eventId)
-    {
-        // Project only the columns the grid needs — never the user photo or session poster blobs.
-        var rows = await _db.Registrations
-            .Where(r => r.EventId == eventId)
-            .OrderByDescending(r => r.CheckedInAt != null)
-            .ThenBy(r => r.User != null ? r.User.FullName : r.GuestFullName)
-            .Select(r => new
-            {
-                r.Id,
-                FullName = r.User != null ? r.User.FullName : (r.GuestFullName ?? "Guest"),
-                Email = r.User != null ? r.User.Email : (r.GuestEmail ?? r.GuestPhone ?? ""),
-                Organization = r.User != null ? r.User.Organization : null,
-                SenateNo = r.User != null ? r.User.SenateNo : r.GuestSenateNo,
-                Phone = r.User != null ? r.User.Phone : r.GuestPhone,
-                r.RegisteredAt, r.ConfirmedAt, r.CheckedInAt, r.CheckInMethod,
-                r.KitClaimedAt, r.KitClaimedBy,
-                r.MealsRedeemedAt, r.MealsRedeemedBy,
-                r.FormResponses,
-                r.SessionId,
-                SessionTitle = r.Session != null ? r.Session.Title : null,
-            })
-            .ToListAsync();
-
-        // Per-sub-event meal totals (value = Σ denomination×quantity, count = Σ quantity).
-        // Event-level (per-day) stubs are handled by the meal board, not here.
-        var mealTotals = await _db.Meals
-            .Where(m => m.EventId == eventId && m.SessionId != null)
-            .GroupBy(m => m.SessionId!.Value)
-            .Select(g => new
-            {
-                SessionId = g.Key,
-                Value = g.Sum(m => m.Denomination * m.Quantity),
-                Count = g.Sum(m => m.Quantity),
-            })
-            .ToDictionaryAsync(x => x.SessionId, x => new { x.Value, x.Count });
-
-        return rows.Select(r =>
-        {
-            decimal mealValue = 0;
-            int mealCount = 0;
-            if (r.SessionId is int sid && mealTotals.TryGetValue(sid, out var mt))
-            {
-                mealValue = mt.Value;
-                mealCount = mt.Count;
-            }
-            return new AttendeeDto(
-                r.Id, r.FullName, r.Email, r.Organization, r.SenateNo, r.Phone,
-                r.RegisteredAt, r.ConfirmedAt, r.CheckedInAt,
-                FormJson.ReadResponses(r.FormResponses),
-                r.SessionId, r.SessionTitle, r.CheckInMethod,
-                r.KitClaimedAt, r.KitClaimedBy,
-                mealValue, mealCount, r.MealsRedeemedAt, r.MealsRedeemedBy);
-        }).ToList();
     }
 
     private static string Csv(string value)

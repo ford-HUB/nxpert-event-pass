@@ -32,6 +32,13 @@ public class AppDbContext : DbContext
         // event-level registrations; guests (UserId NULL) are exempt via the filter.
         b.Entity<Registration>().HasIndex(r => new { r.EventId, r.SessionId, r.UserId })
             .IsUnique().HasFilter("[UserId] IS NOT NULL");
+        // The unique index above is filtered (accounts only), so it can't serve whole-event reads.
+        // This one backs the Attendance list / realtime row loads (WHERE EventId), the per-session
+        // registered/checked-in counts (covered via the included columns), and the guest de-dup
+        // lookup (EventId + SessionId + GuestSenateNo).
+        b.Entity<Registration>().HasIndex(r => new { r.EventId, r.SessionId, r.GuestSenateNo })
+            .IncludeProperties(r => new { r.ConfirmedAt, r.CheckedInAt })
+            .HasDatabaseName("IX_Registrations_Event_Attendance");
         b.Entity<Registration>()
             .HasOne(r => r.Event).WithMany(e => e.Registrations)
             .HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Cascade);
@@ -72,6 +79,8 @@ public class AppDbContext : DbContext
             .HasIndex(ms => ms.ControlNumber).IsUnique();
 
         b.Entity<Invitation>().HasIndex(i => i.Token).IsUnique();
+        // Registration looks up the caller's invite by (event, email) on every submit.
+        b.Entity<Invitation>().HasIndex(i => new { i.EventId, i.Email });
         b.Entity<Invitation>()
             .HasOne(i => i.Event).WithMany(e => e.Invitations)
             .HasForeignKey(i => i.EventId).OnDelete(DeleteBehavior.Cascade);

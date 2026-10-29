@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+// Machine-local secrets (gitignored), e.g. appsettings.Development.Local.json.
+builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.Local.json", optional: true);
 
 // ---- Database ----
 builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -35,6 +37,7 @@ builder.Services.AddSingleton<MealStubImageService>();
 builder.Services.AddScoped<MealStubService>();
 builder.Services.AddScoped<PassService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<AttendeeQuery>();
 builder.Services.AddSignalR();
 
 // ---- Auth ----

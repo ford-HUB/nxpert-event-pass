@@ -1,4 +1,5 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -22,6 +23,7 @@ import { ApiService } from '../../../core/api.service';
 import { AuthService } from '../../../core/auth.service';
 import { ToastService } from '../../../core/toast.service';
 import { ConfirmService } from '../../../core/confirm.service';
+import { RealtimeService } from '../../../core/realtime.service';
 import { AttendeeDto, ContactDto, EventDto, EventFeedbackSummary, MealBoardDto, MealBoardRow, MealStubDetailDto } from '../../../core/models';
 import { ImageViewerDialogComponent } from '../../../shared/image-viewer/image-viewer-dialog';
 import { KitClaimDialogComponent, KitClaimResult } from '../../../shared/kit-claim-dialog';
@@ -60,6 +62,8 @@ export class EventDetailComponent implements OnInit {
   private toast = inject(ToastService);
   private confirmer = inject(ConfirmService);
   private dialog = inject(MatDialog);
+  private realtime = inject(RealtimeService);
+  private destroyRef = inject(DestroyRef);
 
   // Open an uploaded image-field answer in a full-size viewer dialog.
   viewImage(src: string, fieldLabel: string, attendeeName: string): void {
@@ -254,6 +258,14 @@ export class EventDetailComponent implements OnInit {
   ngOnInit(): void {
     this.id = +(this.route.snapshot.paramMap.get('id') ?? 0);
     this.reload();
+    // Live updates: registrations, confirmations, check-ins (incl. scanner), kit/meal claims and
+    // cancellations arrive over the SignalR hub with their full rows, so the Attendance list is
+    // patched in place instead of re-fetched — also when another admin made the change.
+    this.realtime.attendeesChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((n) => {
+        if (n.eventId === this.id) this.applyAttendeeChanges(n.attendees, n.removedIds);
+      });
     // Contacts (invite picker) are admin-only; confirmers only need the attendance list.
     if (this.auth.isAdmin()) {
       this.api.listContacts().subscribe((c) => this.contacts.set(c));
@@ -274,6 +286,43 @@ export class EventDetailComponent implements OnInit {
     // Feedback summary is admin-only on the API; skip it for non-admin confirmers.
     if (this.auth.isAdmin()) {
       this.api.feedbackSummary(this.id).subscribe((f) => this.feedback.set(f));
+    }
+  }
+
+  // Upsert pushed rows by registration id (a push can race the initial load), drop removed
+  // ones, and keep the header's registered / checked-in counts in step.
+  private applyAttendeeChanges(rows: AttendeeDto[], removedIds: number[]): void {
+    const current = new Map(this.attendees().map((a) => [a.registrationId, a]));
+    const removed = new Set(removedIds.filter((id) => current.has(id)));
+    const byId = new Map(rows.map((r) => [r.registrationId, r]));
+    const fresh = rows.filter((r) => !current.has(r.registrationId));
+
+    let checkedInDelta = 0;
+    for (const r of rows) checkedInDelta += (r.checkedInAt ? 1 : 0) - (current.get(r.registrationId)?.checkedInAt ? 1 : 0);
+    for (const id of removed) checkedInDelta -= current.get(id)?.checkedInAt ? 1 : 0;
+    const registeredDelta = fresh.length - removed.size;
+
+    this.attendees.update((list) => [
+      ...list.filter((a) => !removed.has(a.registrationId)).map((a) => byId.get(a.registrationId) ?? a),
+      ...fresh,
+    ]);
+    if (registeredDelta || checkedInDelta) {
+      this.event.update((e) =>
+        e
+          ? {
+              ...e,
+              registeredCount: e.registeredCount + registeredDelta,
+              checkedInCount: e.checkedInCount + checkedInDelta,
+            }
+          : e,
+      );
+    }
+    // A cancelled row can't stay selected for a bulk action.
+    if (removed.size) {
+      const prune = (s: Set<number>) => new Set([...s].filter((id) => !removed.has(id)));
+      this.selectedAttendees.update(prune);
+      this.selectedKits.update(prune);
+      this.selectedMeals.update(prune);
     }
   }
 

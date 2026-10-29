@@ -41,12 +41,23 @@ public record UserImportResult(int Created, int Skipped, int Failed, List<UserIm
 public record FaceDescriptorDto(int UserId, string FullName, float[] Descriptor);
 // A guest registration's face for an event, matched by the scanner and checked in by Token.
 public record RegistrationFaceDto(string Token, string Name, float[] Descriptor);
+// One registrant in the face engine's gallery. Photo is the registered picture (a data URL).
+public record FaceEngineGalleryItem(string PersonId, string Name, string Photo);
 
 // ---- Realtime notifications (pushed over the SignalR hub) ----
 // Sent to admins/confirmers when a registration is created.
 public record NewRegistrationNotice(
     int EventId, string EventTitle, string AttendeeName, string? SessionTitle,
     int Count, bool IsGuest, DateTime At);
+// Sent to admins/confirmers whenever Attendance rows change (registered, confirmed, checked in,
+// kit/meal claimed, answers edited) or are removed (cancelled), so an open Attendance tab can
+// patch its list in place instead of re-fetching it. Attendees are upserted by RegistrationId.
+public record AttendeesChangedNotice(int EventId, List<AttendeeDto> Attendees, List<int> RemovedIds);
+// Sent to admins when an event's face gallery changed (registration added/removed, photo changed),
+// so an open door TV re-syncs the face engine.
+public record FaceGalleryChangedNotice(int EventId);
+// Sent to admins when an event's verify-only mode is switched, so open scanners / TVs follow it.
+public record VerifyOnlyChangedNotice(int EventId, bool Enabled);
 // Sent to a registrant when their registration is confirmed by an admin.
 public record RegistrationApprovedNotice(
     int RegistrationId, int EventId, string EventTitle, string? SessionTitle, DateTime At);
@@ -57,7 +68,8 @@ public record KitClaimedNotice(
 // ---- Offline bundle: everything the scanner/registration screens need with no network ----
 public record OfflineEventDto(
     int Id, string Title, string PublicSlug, string? WelcomeMessage, DateTime StartsAt,
-    DateTime EndsAt, string Venue, string Status, bool IsPublicLinkEnabled, string? BannerImage);
+    DateTime EndsAt, string Venue, string Status, bool IsPublicLinkEnabled, string? BannerImage,
+    bool VerifyOnly = false);
 public record OfflineSessionDto(
     int Id, string Title, DateTime StartsAt, DateTime EndsAt, string? Venue, int? Capacity);
 public record OfflineMemberDto(
@@ -136,7 +148,9 @@ public record EventDto(
     bool NotifyOnKitClaim, List<MealDto> Meals,
     // Format: InPerson / Online / Hybrid. MeetingUrl is only filled for admin responses — public
     // and browse responses never expose the join link (confirmed registrants get it via My Events).
-    string Format = EventFormats.InPerson, string? MeetingUrl = null);
+    string Format = EventFormats.InPerson, string? MeetingUrl = null, bool VerifyOnly = false);
+// Turn an event's verify-only mode on or off (scanner switch).
+public record VerifyOnlyRequest(bool Enabled);
 
 // A row in the event's schedule-of-activities grid.
 public record ScheduleItem(string? Day, string? Time, string Activity);
@@ -198,10 +212,12 @@ public record EditLinkRequest(string? Contact);
 // so the page can redirect straight to the edit form.
 public record SenateEditRequest(string? SenateNo, string? Name);
 
-public record CheckInRequest(string Token);
+// EventId / SessionId (optional) restrict the scan to the scanner's event / chosen sub-event.
+// Verify = look the pass up without recording attendance ("verified" instead of "valid").
+public record CheckInRequest(string Token, int? EventId = null, int? SessionId = null, bool Verify = false);
 // Facial-recognition check-in: the client identified a user; check them in for this event.
-public record UserCheckInRequest(int EventId, int UserId);
-// Status: valid | already | invalid | unconfirmed | notstarted | ended
+public record UserCheckInRequest(int EventId, int UserId, int? SessionId = null, bool Verify = false);
+// Status: valid | verified | already | invalid | unconfirmed | notstarted | ended
 // Member fields (Level/SenateNo/Organization) drive the TV welcome display; they are
 // populated for account-based registrations and null for guests.
 public record CheckInResult(
@@ -307,3 +323,8 @@ public record ChapterCount(string Chapter, int Count, int KitClaimed);
 public record EventChapterBreakdown(
     int EventId, string EventTitle, DateTime StartsAt, int TotalRegistrations, int TotalKitClaimed,
     List<ChapterCount> Chapters);
+
+// Registrations per sub-event (session) for one event, with each sub-event's capacity for context.
+public record SubEventCount(int SessionId, string Title, DateTime StartsAt, int Count, int? Capacity);
+public record EventSubEventBreakdown(
+    int EventId, string EventTitle, int TotalRegistrations, List<SubEventCount> SubEvents);

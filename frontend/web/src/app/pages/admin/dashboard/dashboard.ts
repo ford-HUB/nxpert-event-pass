@@ -10,7 +10,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ApiService } from '../../../core/api.service';
-import { ChapterCount, DashboardSummary, EventChapterBreakdown, EventDto } from '../../../core/models';
+import {
+  ChapterCount,
+  DashboardSummary,
+  EventChapterBreakdown,
+  EventDto,
+  EventSubEventBreakdown,
+  SubEventCount,
+} from '../../../core/models';
 
 @Component({
   selector: 'app-dashboard',
@@ -89,6 +96,26 @@ import { ChapterCount, DashboardSummary, EventChapterBreakdown, EventDto } from 
         overflow: hidden;
       }
       .chapter-fill { height: 100%; border-radius: 999px; min-width: 2px; transition: width 0.3s ease; }
+      .sub-day-label {
+        margin: 14px 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .sub-day-label:first-child { margin-top: 2px; }
+      .full-tag {
+        margin-left: 6px;
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        background: color-mix(in srgb, #d93025 16%, transparent);
+        color: #d93025;
+        vertical-align: middle;
+      }
     `,
   ],
 })
@@ -102,6 +129,9 @@ export class DashboardComponent implements OnInit {
   selectedEventId = signal<number | null>(null);
   breakdown = signal<EventChapterBreakdown | null>(null);
   breakdownLoading = signal(false);
+  // Registrations per sub-event for the selected event.
+  subEvents = signal<EventSubEventBreakdown | null>(null);
+  subLoading = signal(false);
 
   // Inline search for the event dropdown. The selected event is always kept in the list so the
   // trigger label stays populated even when it doesn't match the current query.
@@ -157,11 +187,58 @@ export class DashboardComponent implements OnInit {
         this.breakdownLoading.set(false);
       },
     });
+    this.subLoading.set(true);
+    this.api.subEventBreakdown(id).subscribe({
+      next: (b) => {
+        this.subEvents.set(b);
+        this.subLoading.set(false);
+      },
+      error: () => {
+        this.subEvents.set(null);
+        this.subLoading.set(false);
+      },
+    });
   }
 
-  // Whether each chapter chart card is expanded (collapsible headers).
+  // Whether each chart card is expanded (collapsible headers).
   regChartOpen = signal(true);
   kitChartOpen = signal(true);
+  subChartOpen = signal(true);
+
+  // ---- Registrations per sub-event ----
+  subTotal = computed(() => this.subEvents()?.totalRegistrations ?? 0);
+
+  // Sub-events grouped by calendar day (chronological), matching how they're shown elsewhere.
+  subEventDays = computed(() => {
+    const list = this.subEvents()?.subEvents ?? [];
+    const groups: { day: string; startsAt: string; items: SubEventCount[] }[] = [];
+    const index = new Map<string, number>();
+    for (const s of list) {
+      const day = new Date(s.startsAt).toDateString();
+      let i = index.get(day);
+      if (i === undefined) {
+        i = groups.length;
+        index.set(day, i);
+        groups.push({ day, startsAt: s.startsAt, items: [] });
+      }
+      groups[i].items.push(s);
+    }
+    return groups;
+  });
+
+  // Bar length as a % of the busiest sub-event, so it's a true count comparison.
+  subBarWidth(count: number): number {
+    const max = Math.max(0, ...(this.subEvents()?.subEvents ?? []).map((s) => s.count));
+    return max === 0 ? 0 : Math.round((100 * count) / max);
+  }
+
+  // How full a sub-event is (only when it has a capacity).
+  subPct(s: SubEventCount): number {
+    return s.capacity && s.capacity > 0 ? Math.round((100 * s.count) / s.capacity) : 0;
+  }
+  subFull(s: SubEventCount): boolean {
+    return s.capacity != null && s.capacity > 0 && s.count >= s.capacity;
+  }
 
   // Bar length as a % of the widest chapter, so the chart scales to the largest count.
   barWidth(count: number): number {

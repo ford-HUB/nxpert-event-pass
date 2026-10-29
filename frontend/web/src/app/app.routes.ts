@@ -89,6 +89,12 @@ export const routes: Routes = [
       import('./pages/admin/event-detail/event-detail').then((m) => m.EventDetailComponent),
   },
   {
+    // Door TV for camera check-in through the face recognition engine.
+    path: 'scanner/:eventId/tv',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./pages/face-tv/face-tv').then((m) => m.FaceTvComponent),
+  },
+  {
     path: 'scanner/:eventId',
     canActivate: [adminGuard],
     loadComponent: () => import('./pages/scanner/scanner').then((m) => m.ScannerComponent),

@@ -15,13 +15,16 @@ public class AuthController : ControllerBase
     private readonly JwtService _jwt;
     private readonly EmailService _email;
     private readonly IConfiguration _config;
+    private readonly NotificationService _notify;
 
-    public AuthController(AppDbContext db, JwtService jwt, EmailService email, IConfiguration config)
+    public AuthController(AppDbContext db, JwtService jwt, EmailService email, IConfiguration config,
+        NotificationService notify)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
         _config = config;
+        _notify = notify;
     }
 
     private bool RequireVerification => _config.GetValue("App:RequireEmailVerification", false);
@@ -162,12 +165,18 @@ public class AuthController : ControllerBase
         u.Organization = string.IsNullOrWhiteSpace(req.Organization) ? null : req.Organization.Trim();
         u.Phone = phone;
         u.NotificationChannel = channel;
+        var photoChanged = false;
         if (req.Photo is not null) // null = leave unchanged; "" = clear
-            u.PhotoUrl = req.Photo.Length == 0 ? null : req.Photo;
+        {
+            var photo = req.Photo.Length == 0 ? null : req.Photo;
+            photoChanged = photo != u.PhotoUrl;
+            u.PhotoUrl = photo;
+        }
         if (req.Face is not null) // null = leave unchanged; "" = clear the face registration
             u.FaceDescriptor = req.Face.Length == 0 ? null : req.Face;
 
         await _db.SaveChangesAsync();
+        if (photoChanged) await _notify.UserPhotoChangedAsync(u.Id);
         // Return a fresh auth response so the client updates its stored session (name/photo).
         return Ok(AuthFor(u));
     }

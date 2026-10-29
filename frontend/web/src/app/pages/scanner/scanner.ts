@@ -1,5 +1,4 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -11,16 +10,22 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RealtimeService } from '../../core/realtime.service';
 import { ApiService } from '../../core/api.service';
 import { FaceSample, FaceService } from '../../core/face.service';
 import { OfflineService } from '../../core/offline.service';
 import { BeepService } from '../../core/beep.service';
 import {
+  CheckInOptions,
   CheckInResult,
   FaceDescriptorDto,
   MealStubScanResult,
   OfflineBundle,
   RegistrationFace,
+  SessionDto,
 } from '../../core/models';
 
 type ScanMode = 'camera' | 'barcode' | 'face' | 'auto';
@@ -46,6 +51,8 @@ const FACE_MIN_WIDTH_RATIO = 0.1;
 const FACE_MAX_YAW = 0.3;
 const FACE_MAX_ROLL = 15;
 const FACE_CHECK_INTERVAL_MS = 600;
+// Camera preview frame rate (ideal, not required, so cameras that can't do it still open).
+const CAMERA_FPS = 30;
 // After a result clears, the same pass/face is ignored for a short, fixed time so it doesn't
 // re-fire the instant the banner disappears. Errors come back quickly; successes wait longer.
 const ERROR_COOLDOWN_MS = 1000;
@@ -70,6 +77,10 @@ function loadCamSize(): CamSize {
   }
 }
 
+// The chosen sub-event is remembered per event on this device. (Verify-only is stored on the
+// event in the database, so it applies to every scanner.)
+const sessionKey = (eventId: number) => `scanner_session_${eventId}`;
+
 function loadFacing(key: string, fallback: CameraFacing): CameraFacing {
   try {
     const v = localStorage.getItem(key);
@@ -90,6 +101,7 @@ function saveFacing(key: string, value: CameraFacing): void {
 type BannerState =
   | 'idle'
   | 'valid'
+  | 'verified'
   | 'already'
   | 'invalid'
   | 'unconfirmed'
@@ -104,12 +116,11 @@ type BannerState =
   | 'mealnotvalid';
 
 // Results that mean "done" (checked in / redeemed); anything else is a validation error.
-const SUCCESS_STATES = new Set<BannerState>(['valid', 'already', 'mealvalid', 'mealalready']);
+const SUCCESS_STATES = new Set<BannerState>(['valid', 'verified', 'already', 'mealvalid', 'mealalready']);
 
 @Component({
   selector: 'app-scanner',
   imports: [
-    NgTemplateOutlet,
     FormsModule,
     RouterLink,
     MatButtonModule,
@@ -119,6 +130,8 @@ const SUCCESS_STATES = new Set<BannerState>(['valid', 'already', 'mealvalid', 'm
     MatFormFieldModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './scanner.html',
   styleUrl: './scanner.scss',
@@ -129,6 +142,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   private face = inject(FaceService);
   protected offline = inject(OfflineService);
   protected beeper = inject(BeepService);
+  private realtime = inject(RealtimeService);
   private scanner: Html5Qrcode | null = null;
   private readonly regionId = 'qr-reader';
 
@@ -141,7 +155,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   eventId = 0;
   eventTitle = signal<string>('');
   eventWelcome = signal<string | null>(null);
-  // The event's banner image (base64 data URL), shown as a header strip and the TV standby hero.
+  // The event's banner image (base64 data URL), shown as a header strip.
   eventBanner = signal<string | null>(null);
 
   // Input source: QR camera, hardware barcode scanner (keyboard-wedge), or facial recognition.
@@ -149,6 +163,14 @@ export class ScannerComponent implements OnInit, OnDestroy {
   // What a scan does. Meal redemption is token-based (camera/barcode) and requires a connection.
   scanAction = signal<ScanAction>('checkin');
   mealsRedeemedCount = signal(0);
+  // Verify only: scans look passes up (who, confirmed?) without recording any check-in. Stored on
+  // the event and enforced by the server, so every scanner and TV of the event follows it.
+  verifyOnly = signal(false);
+  verifyOnlySaving = signal(false);
+  verifiedCount = signal(0);
+  // Sub-events of this event; when one is chosen, only its passes are accepted.
+  sessions = signal<SessionDto[]>([]);
+  sessionId = signal<number | null>(null);
   barcodeValue = '';
   @ViewChild('barcodeInput') private barcodeInput?: ElementRef<HTMLInputElement>;
 
@@ -185,6 +207,9 @@ export class ScannerComponent implements OnInit, OnDestroy {
   qrFacing = signal<CameraFacing>(loadFacing(QR_FACING_KEY, 'environment'));
   faceFacing = signal<CameraFacing>(loadFacing(FACE_FACING_KEY, 'user'));
   canSwitchCamera = signal(false);
+  // Mirror the QR preview like face mode unless the camera that actually opened is a back camera.
+  // Laptop webcams usually don't report a facing, so they mirror too.
+  qrMirrored = signal(false);
 
   // ---- Camera preview size (Small / Medium / Large) ----
   camSize = signal<CamSize>(loadCamSize());
@@ -216,8 +241,16 @@ export class ScannerComponent implements OnInit, OnDestroy {
   resultSession = signal<string | null>(null);
   checkedCount = signal(0);
 
-  // TV / presentation mode: a full-screen welcome display for a big screen at the door.
-  tvMode = signal(false);
+
+  constructor() {
+    this.realtime.verifyOnlyChanged$
+      .pipe(takeUntilDestroyed())
+      .subscribe((n) => {
+        if (n.eventId !== this.eventId || n.enabled === this.verifyOnly()) return;
+        this.verifyOnly.set(n.enabled);
+        if (n.enabled) this.verifiedCount.set(0);
+      });
+  }
 
   ngOnInit(): void {
     this.eventId = +(this.route.snapshot.paramMap.get('eventId') ?? 0);
@@ -227,6 +260,9 @@ export class ScannerComponent implements OnInit, OnDestroy {
           this.eventTitle.set(e.title);
           this.eventWelcome.set(e.welcomeMessage);
           this.eventBanner.set(e.bannerImage);
+          this.sessions.set(e.sessions ?? []);
+          this.verifyOnly.set(e.verifyOnly);
+          this.restoreSession();
         },
         error: () => {},
       });
@@ -263,9 +299,11 @@ export class ScannerComponent implements OnInit, OnDestroy {
       await this.scanner.start(
         { facingMode: this.qrFacing() },
         {
-          fps: 10,
+          fps: CAMERA_FPS,
+          // Ask the camera itself for 30 fps; otherwise many devices default to a choppy stream.
+          videoConstraints: { facingMode: this.qrFacing(), frameRate: { ideal: CAMERA_FPS } },
           // Adaptive scan box: sized to the actual viewfinder so it stays valid whether the
-          // camera is full-size or shrunk into the TV-mode corner preview.
+          // preview is Small, Medium or Large.
           qrbox: (vw: number, vh: number) => {
             const s = Math.max(120, Math.floor(Math.min(vw, vh) * 0.8));
             return { width: s, height: s };
@@ -275,6 +313,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
         () => {}, // per-frame decode failures are noise; ignore
       );
       this.scanning.set(true);
+      this.qrMirrored.set(this.runningFacing() !== 'environment');
       void this.detectCameras();
     } catch (err) {
       this.cameraError.set(
@@ -286,7 +325,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   }
 
   // Stops the camera only. The result banner keeps its own timer (clearing it here left a
-  // banner stuck on screen when TV mode restarted the camera mid-result).
+  // banner stuck on screen when the camera restarted mid-result).
   async stop(): Promise<void> {
     if (this.scanner) {
       try {
@@ -298,6 +337,14 @@ export class ScannerComponent implements OnInit, OnDestroy {
       this.scanner = null;
     }
     this.scanning.set(false);
+  }
+
+  private runningFacing(): string | undefined {
+    try {
+      return this.scanner?.getRunningTrackSettings().facingMode;
+    } catch {
+      return this.qrFacing();
+    }
   }
 
   // Show the switch only when there's a second camera to switch to. Device labels/count are only
@@ -338,7 +385,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   }
 
   // Resize the camera preview. html5-qrcode measures its scan region only when it starts, so a
-  // running QR camera is restarted once the new layout has settled (same as the TV-mode toggle).
+  // running QR camera is restarted once the new layout has settled.
   // Face mode reads the <video> directly and needs no restart.
   setCamSize(size: CamSize): void {
     if (size === this.camSize()) return;
@@ -360,41 +407,54 @@ export class ScannerComponent implements OnInit, OnDestroy {
     }
   }
 
-  // − / + on the TV-mode corner preview.
-  stepCamSize(delta: 1 | -1): void {
-    const i = CAM_SIZES.indexOf(this.camSize()) + delta;
-    if (i >= 0 && i < CAM_SIZES.length) this.setCamSize(CAM_SIZES[i]);
-  }
-
-  // Toggle the big-screen welcome display and (best-effort) browser fullscreen.
-  async toggleTv(): Promise<void> {
-    const on = !this.tvMode();
-    this.tvMode.set(on);
-    try {
-      if (on) {
-        await document.documentElement.requestFullscreen?.();
-      } else if (document.fullscreenElement) {
-        await document.exitFullscreen?.();
-      }
-    } catch {
-      /* fullscreen may be blocked; TV layout still applies without it */
-    }
-
-    // The camera viewfinder changes size between the full view and the corner PiP. Restart
-    // the scanner so html5-qrcode recomputes its scan region for the new size — otherwise it
-    // keeps the old (mismatched) region and stops detecting QR codes.
-    if ((this.mode() === 'camera' || this.mode() === 'auto') && this.scanner) {
-      await this.stop();
-      // Wait for the fullscreen transition + layout reflow before re-reading the element size.
-      // The face loop (auto) keeps running and re-attaches to the new video element automatically.
-      setTimeout(() => {
-        if (this.mode() === 'camera' || this.mode() === 'auto') this.start();
-      }, 300);
-    }
-  }
-
   // Switch between check-in and meal-stub redemption. Meal redemption is token-based, so face
   // input isn't available for it — fall back to the QR camera.
+  setVerifyOnly(on: boolean): void {
+    const was = this.verifyOnly();
+    this.verifyOnly.set(on);
+    if (on) this.verifiedCount.set(0);
+    this.verifyOnlySaving.set(true);
+    this.api.setVerifyOnly(this.eventId, on).subscribe({
+      next: (r) => {
+        this.verifyOnly.set(r.enabled);
+        this.verifyOnlySaving.set(false);
+      },
+      error: () => {
+        // Not saved (offline / no permission) — put the switch back so it shows the real state.
+        this.verifyOnly.set(was);
+        this.verifyOnlySaving.set(false);
+        this.syncMsg.set('Could not change verify-only mode — it needs a connection.');
+        setTimeout(() => this.syncMsg.set(null), 4000);
+      },
+    });
+  }
+
+  setSession(id: number | null): void {
+    this.sessionId.set(id);
+    try {
+      if (id === null) localStorage.removeItem(sessionKey(this.eventId));
+      else localStorage.setItem(sessionKey(this.eventId), String(id));
+    } catch {
+      /* storage unavailable — keep the in-memory choice */
+    }
+  }
+
+  // Re-select the sub-event chosen last time, if it still exists.
+  private restoreSession(): void {
+    try {
+      const id = Number(localStorage.getItem(sessionKey(this.eventId)));
+      if (id && this.sessions().some((s) => s.id === id)) this.sessionId.set(id);
+    } catch {
+      /* storage unavailable — default to all sub-events */
+    }
+  }
+
+  // What the current scanner settings ask of a check-in.
+  private checkOptions(): CheckInOptions {
+    // verify mirrors the event's flag; the server applies the stored flag either way.
+    return { eventId: this.eventId, sessionId: this.sessionId(), verify: this.verifyOnly() };
+  }
+
   setAction(a: ScanAction): void {
     if (a === this.scanAction()) return;
     this.scanAction.set(a);
@@ -454,7 +514,12 @@ export class ScannerComponent implements OnInit, OnDestroy {
       await this.face.ensureLoaded();
       await this.loadFaceData();
       this.faceStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: this.faceFacing(), width: { ideal: 640 }, height: { ideal: 480 } },
+        video: {
+          facingMode: this.faceFacing(),
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: CAMERA_FPS },
+        },
         audio: false,
       });
       const v = this.faceVideo!.nativeElement;
@@ -525,11 +590,11 @@ export class ScannerComponent implements OnInit, OnDestroy {
   }
 
   // Face matched a member in the user master, but they aren't registered for THIS event.
-  private showNotRegistered(name: string | null): void {
+  private showNotRegistered(name: string | null, message?: string | null): void {
     this.setResult('notreg', {
       name,
       event: this.eventTitle() || null,
-      message: 'This member is not registered for this event.',
+      message: message || 'This member is not registered for this event.',
     });
     this.scheduleResume(3500);
   }
@@ -693,15 +758,16 @@ export class ScannerComponent implements OnInit, OnDestroy {
       await this.redeemMeal(token, t);
       return;
     }
+    const opts = this.checkOptions();
     try {
       const res = this.offline.online()
-        ? await firstValueFrom(this.api.checkIn(token))
-        : await this.offline.localCheckIn(this.eventId, token);
+        ? await firstValueFrom(this.api.checkIn(token, opts))
+        : await this.offline.localCheckIn(this.eventId, token, opts);
       if (this.isCurrent(t)) this.showResult(res);
     } catch {
       // Online request failed (e.g. network dropped mid-scan) → try the local bundle.
       try {
-        const res = await this.offline.localCheckIn(this.eventId, token);
+        const res = await this.offline.localCheckIn(this.eventId, token, opts);
         if (this.isCurrent(t)) this.showResult(res);
       } catch {
         if (this.isCurrent(t)) this.showError();
@@ -750,12 +816,15 @@ export class ScannerComponent implements OnInit, OnDestroy {
   // matched in the user master, so a "not found for this event" result means they're recognized
   // but simply not registered for it — reported with their name, not as an unknown face.
   private async checkInFace(userId: number, name: string, t: number): Promise<void> {
+    const opts = this.checkOptions();
     if (this.offline.online()) {
       try {
-        const res = await firstValueFrom(this.api.checkInUser(this.eventId, userId));
+        const res = await firstValueFrom(
+          this.api.checkInUser(this.eventId, userId, { sessionId: opts.sessionId, verify: opts.verify }),
+        );
         if (!this.isCurrent(t)) return;
         if (res.status === 'invalid') {
-          this.showNotRegistered(res.fullName ?? name);
+          this.showNotRegistered(res.fullName ?? name, res.message);
         } else {
           this.showResult(res);
         }
@@ -765,13 +834,13 @@ export class ScannerComponent implements OnInit, OnDestroy {
       }
     }
     if (!this.isCurrent(t)) return;
-    const token = this.bundle ? this.offline.resolveFaceToken(this.bundle, userId) : null;
+    const token = this.bundle ? this.offline.resolveFaceToken(this.bundle, userId, opts.sessionId) : null;
     if (!token) {
       this.showNotRegistered(name); // recognized, but no registration for this event in the bundle
       return;
     }
     try {
-      const res = await this.offline.localCheckIn(this.eventId, token);
+      const res = await this.offline.localCheckIn(this.eventId, token, opts);
       if (this.isCurrent(t)) this.showResult(res);
     } catch {
       if (this.isCurrent(t)) this.showError();
@@ -780,14 +849,15 @@ export class ScannerComponent implements OnInit, OnDestroy {
 
   // Check in a face-recognized guest (identified by their registration token — no user account).
   private async checkInGuestFace(token: string, t: number): Promise<void> {
+    const opts = this.checkOptions();
     try {
       const res = this.offline.online()
-        ? await firstValueFrom(this.api.checkIn(token))
-        : await this.offline.localCheckIn(this.eventId, token);
+        ? await firstValueFrom(this.api.checkIn(token, opts))
+        : await this.offline.localCheckIn(this.eventId, token, opts);
       if (this.isCurrent(t)) this.showResult(res);
     } catch {
       try {
-        const res = await this.offline.localCheckIn(this.eventId, token);
+        const res = await this.offline.localCheckIn(this.eventId, token, opts);
         if (this.isCurrent(t)) this.showResult(res);
       } catch {
         if (this.isCurrent(t)) this.showError();
@@ -861,6 +931,8 @@ export class ScannerComponent implements OnInit, OnDestroy {
       session: res.sessionTitle,
     });
     if (res.status === 'valid') this.checkedCount.update((c) => c + 1);
+    if (this.verifyOnly() && (res.status === 'verified' || res.status === 'already'))
+      this.verifiedCount.update((c) => c + 1);
     // Off-window / unconfirmed scans linger a touch longer so the operator reads the reason.
     const longer = res.status === 'notstarted' || res.status === 'ended' || res.status === 'unconfirmed';
     this.scheduleResume(longer ? 4000 : 2500);

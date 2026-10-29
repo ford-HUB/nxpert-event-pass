@@ -1,5 +1,6 @@
 using EventRegistration.Api.Data;
 using EventRegistration.Api.Models;
+using EventRegistration.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,12 @@ namespace EventRegistration.Api.Controllers;
 public class CheckInController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public CheckInController(AppDbContext db) => _db = db;
+    private readonly NotificationService _notify;
+    public CheckInController(AppDbContext db, NotificationService notify)
+    {
+        _db = db;
+        _notify = notify;
+    }
 
     /// <summary>
     /// Validates a scanned QR payload and marks attendance. Returns one of:
@@ -40,7 +46,35 @@ public class CheckInController : ControllerBase
         if (reg is null)
             return Ok(new CheckInResult("invalid", null, null, null));
 
-        return Ok(await EvaluateAsync(reg, CheckInMethods.Scan));
+        // A pass for another event (or another sub-event than the one selected) is refused.
+        if (req.EventId is int eventId && reg.EventId != eventId)
+            return Ok(new CheckInResult("invalid", reg.DisplayName, reg.Event!.Title, null,
+                "This pass is for a different event."));
+        if (req.SessionId is int sessionId && reg.SessionId != sessionId)
+            return Ok(new CheckInResult("invalid", reg.DisplayName, reg.Event!.Title, null,
+                $"This pass is for {reg.Session?.Title ?? "the main event"}, not the selected sub-event.",
+                SessionTitle: reg.Session?.Title));
+
+        return Ok(await EvaluateAsync(reg, CheckInMethods.Scan, req.Verify));
+    }
+
+    /// <summary>
+    /// Switch the event's verify-only mode. While it's on, every scan of this event (QR, barcode,
+    /// face, Face TV) is answered with "verified" and no check-in is recorded — it's enforced here
+    /// on the server, so it applies to every scanner device, not just the one that switched it.
+    /// </summary>
+    [HttpPut("events/{eventId:int}/verify-only")]
+    public async Task<ActionResult<VerifyOnlyRequest>> SetVerifyOnly(int eventId, VerifyOnlyRequest req)
+    {
+        var ev = await _db.Events.FindAsync(eventId);
+        if (ev is null) return NotFound();
+        if (ev.VerifyOnly != req.Enabled)
+        {
+            ev.VerifyOnly = req.Enabled;
+            await _db.SaveChangesAsync();
+            await _notify.VerifyOnlyChangedAsync(eventId, req.Enabled);
+        }
+        return Ok(new VerifyOnlyRequest(ev.VerifyOnly));
     }
 
     /// <summary>
@@ -53,13 +87,16 @@ public class CheckInController : ControllerBase
         var regs = await _db.Registrations
             .Include(r => r.User).Include(r => r.Event).Include(r => r.Session)
             .Where(r => r.EventId == req.EventId && r.UserId == req.UserId)
+            .Where(r => req.SessionId == null || r.SessionId == req.SessionId)
             .ToListAsync();
 
         if (regs.Count == 0)
         {
             var user = await _db.Users.FindAsync(req.UserId);
             return Ok(new CheckInResult("invalid", user?.FullName, null, null,
-                "This person isn't registered for this event."));
+                req.SessionId is null
+                    ? "This person isn't registered for this event."
+                    : "This person isn't registered for the selected sub-event."));
         }
 
         var today = DateTime.Now.Date;
@@ -76,7 +113,7 @@ public class CheckInController : ControllerBase
                    ?? regs.FirstOrDefault(InWindow)
                    ?? regs.OrderBy(r => r.Session != null ? r.Session.StartsAt : r.Event!.StartsAt).First();
 
-        return Ok(await EvaluateAsync(pick, CheckInMethods.Face));
+        return Ok(await EvaluateAsync(pick, CheckInMethods.Face, req.Verify));
     }
 
     /// <summary>
@@ -168,6 +205,7 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<SyncCheckInResult>> Sync(SyncCheckInRequest req)
     {
         int applied = 0, already = 0, notFound = 0;
+        var changed = new List<Registration>();
         foreach (var item in req.Items ?? new())
         {
             if (!Guid.TryParse(item.Token, out var token))
@@ -189,15 +227,22 @@ public class CheckInController : ControllerBase
             reg.CheckedInAt = item.CheckedInAt; // preserve the actual offline time
             reg.CheckInMethod ??= CheckInMethods.Scan; // offline check-ins are QR scans
             applied++;
+            changed.Add(reg);
         }
         await _db.SaveChangesAsync();
+        // A sync batch can span events — push one update per event.
+        foreach (var g in changed.GroupBy(r => r.EventId))
+            await _notify.AttendeesChangedAsync(g.Key, g.Select(r => r.Id));
         return Ok(new SyncCheckInResult(applied, already, notFound));
     }
 
     // Shared: validate a registration and record attendance (window / confirmed / already).
-    private async Task<CheckInResult> EvaluateAsync(Registration reg, string method)
+    // With verify (or the event in verify-only mode), a confirmed pass is reported as "verified"
+    // and nothing is recorded.
+    private async Task<CheckInResult> EvaluateAsync(Registration reg, string method, bool verify = false)
     {
         var ev = reg.Event!;
+        verify |= ev.VerifyOnly;
         var sessionTitle = reg.Session?.Title;
         var windowStart = reg.Session?.StartsAt ?? ev.StartsAt;
         var windowEnd = reg.Session?.EndsAt ?? ev.EndsAt;
@@ -213,6 +258,11 @@ public class CheckInController : ControllerBase
             return new CheckInResult("unconfirmed", reg.DisplayName, ev.Title, null,
                 "This registration hasn't been confirmed yet.", SessionTitle: sessionTitle);
 
+        if (verify)
+            return new CheckInResult("verified", reg.DisplayName, ev.Title, null,
+                Level: reg.User?.Level, SenateNo: reg.DisplaySenateNo, Organization: reg.DisplayOrganization,
+                WelcomeMessage: ev.WelcomeMessage, PhotoUrl: reg.DisplayPhoto, SessionTitle: sessionTitle);
+
         // Window check (session window when present). Times are wall-clock → compare local "today".
         var today = DateTime.Now.Date;
         if (today < windowStart.Date)
@@ -227,6 +277,7 @@ public class CheckInController : ControllerBase
         reg.CheckedInAt = DateTime.Now;
         reg.CheckInMethod = method;
         await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(reg.EventId, new[] { reg.Id });
 
         return new CheckInResult("valid", reg.DisplayName, ev.Title, reg.CheckedInAt,
             Level: reg.User?.Level, SenateNo: reg.DisplaySenateNo, Organization: reg.DisplayOrganization,

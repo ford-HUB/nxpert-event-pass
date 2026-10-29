@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet list package:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(npm start:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm audit:*)",
+      "Bash(sqllocaldb info:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(dir:*)",
+      "Bash(type:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
+    ],
+    "ask": [
+      "Bash(dotnet ef database drop:*)",
+      "Bash(dotnet ef database update:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(iisreset:*)",
+      "Bash(ngrok:*)",
+      "Bash(start:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf:*)",
+      "Bash(del /s:*)",
+      "Bash(rd /s:*)",
+      "Bash(rmdir /s:*)",
+      "Bash(format:*)",
+      "Read(./backend/EventRegistration.Api/appsettings.*.Local.json)"
+    ]
+  }
+}

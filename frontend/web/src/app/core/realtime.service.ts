@@ -5,12 +5,16 @@ import {
   HubConnectionState,
   LogLevel,
 } from '@microsoft/signalr';
+import { Subject } from 'rxjs';
 import { API_BASE } from './config';
 import { AuthService } from './auth.service';
 import { ToastService } from './toast.service';
 import {
   AppNotification,
+  AttendeesChangedNotice,
+  FaceGalleryChangedNotice,
   KitClaimedNotice,
+  VerifyOnlyChangedNotice,
   NewRegistrationNotice,
   RegistrationApprovedNotice,
 } from './models';
@@ -22,6 +26,8 @@ const MAX_KEEP = 50;
  * logged in (re-connecting automatically on drops), and maintains the in-app notification list:
  *  - admins/confirmers receive a "newRegistration" push whenever someone registers;
  *  - registrants receive a "registrationApproved" push when their registration is confirmed.
+ * It also relays "attendeesChanged" (changed/removed Attendance rows) and "faceGalleryChanged" (an
+ * event's registrants or their photos changed) to pages that want live data.
  * The list is persisted per-user in localStorage so it survives a reload.
  */
 @Injectable({ providedIn: 'root' })
@@ -34,6 +40,18 @@ export class RealtimeService {
   readonly notifications = signal<AppNotification[]>([]);
   readonly connected = signal(false);
   readonly unread = computed(() => this.notifications().filter((n) => !n.read).length);
+
+  private attendeesChangedSubject = new Subject<AttendeesChangedNotice>();
+  /** Attendance rows as they're added, updated or removed (admins/confirmers only). */
+  readonly attendeesChanged$ = this.attendeesChangedSubject.asObservable();
+
+  private faceGalleryChangedSubject = new Subject<FaceGalleryChangedNotice>();
+  /** An event's face gallery is stale (registration added/removed, photo changed). Admins only. */
+  readonly faceGalleryChanged$ = this.faceGalleryChangedSubject.asObservable();
+
+  private verifyOnlyChangedSubject = new Subject<VerifyOnlyChangedNotice>();
+  /** An event's verify-only mode was switched (on another scanner). Admins only. */
+  readonly verifyOnlyChanged$ = this.verifyOnlyChangedSubject.asObservable();
 
   constructor() {
     // Connect/disconnect as the auth state changes.
@@ -88,6 +106,9 @@ export class RealtimeService {
     conn.on('newRegistration', (n: NewRegistrationNotice) => this.onNewRegistration(n));
     conn.on('registrationApproved', (n: RegistrationApprovedNotice) => this.onApproved(n));
     conn.on('kitClaimed', (n: KitClaimedNotice) => this.onKitClaimed(n));
+    conn.on('attendeesChanged', (n: AttendeesChangedNotice) => this.attendeesChangedSubject.next(n));
+    conn.on('faceGalleryChanged', (n: FaceGalleryChangedNotice) => this.faceGalleryChangedSubject.next(n));
+    conn.on('verifyOnlyChanged', (n: VerifyOnlyChangedNotice) => this.verifyOnlyChangedSubject.next(n));
     conn.onreconnected(() => this.connected.set(true));
     conn.onreconnecting(() => this.connected.set(false));
     conn.onclose(() => this.connected.set(false));

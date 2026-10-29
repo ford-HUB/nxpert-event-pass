@@ -1,0 +1,113 @@
+<div class="layout" [class.side-closed]="!sideOpen()">
+  <!-- The event banner fills the whole screen: behind the idle stage and the glass attendee panel. -->
+  @if (eventBanner()) { <img class="stage-backdrop" [src]="eventBanner()" alt="" /> }
+  <main class="stage">
+    <!-- One entry, keyed by sequence: each person gets a fresh view, so the animations restart. -->
+    @for (item of shown(); track item.sequence) {
+      @let view = spotlight()!;
+      <section [class]="'spotlight tone-' + view.tone" aria-live="assertive">
+        @if (item.photo) {
+          <img class="spotlight-photo" [src]="item.photo" [alt]="'Photo of ' + item.name" />
+        } @else {
+          <span class="spotlight-photo spotlight-initials" aria-hidden="true">{{ initials(item.name) }}</span>
+        }
+        @if (view.kicker) { <p class="kicker">{{ view.kicker }}</p> }
+        <h1 class="spotlight-name">{{ item.name }}</h1>
+        @if (view.chips.length) {
+          <div class="chips">
+            @for (chip of view.chips; track chip) { <span class="chip-pill">{{ chip }}</span> }
+          </div>
+        }
+        @if (view.event) { <p class="spotlight-event">{{ view.event }}</p> }
+        @if (view.session) { <p class="spotlight-event"><strong>{{ view.session }}</strong></p> }
+        <p class="status-badge">{{ view.badge }}</p>
+        <p class="spotlight-time">{{ view.note }}</p>
+        <div class="progress">
+          <div class="progress-fill" [style.animation-duration.s]="displaySeconds()"></div>
+        </div>
+      </section>
+    } @empty {
+      <section class="idle">
+        <p class="kicker">{{ eventWelcome() || 'Welcome to' }}</p>
+        @if (eventTitle()) { <h1 class="idle-event">{{ eventTitle() }}</h1> }
+        <h2>{{ idleTitle() }}</h2>
+        @if (verifyOnly()) { <p class="verify-pill">Verify only — nobody is being checked in</p> }
+        <p class="idle-hint">{{ idleHint() }}</p>
+      </section>
+    }
+
+    <div class="camera-preview" [style.width.px]="cameraWidth()">
+      <img [src]="cameraUrl()" alt="Live camera" (error)="onCameraError()" />
+      <!-- Drag the corner to resize; double-click resets. Hidden in fullscreen. -->
+      <button type="button" class="camera-resize" aria-label="Resize camera preview"
+              title="Drag to resize · double-click to reset"
+              (pointerdown)="startCameraResize($event)" (dblclick)="resetCameraSize()"
+              (keydown)="onCameraResizeKey($event)"></button>
+    </div>
+
+    @if (!engineOnline() || galleryError()) {
+      <p class="stage-problem" role="status">
+        {{ !engineOnline() ? 'Face engine offline — retrying' : galleryMessage() }}
+      </p>
+    }
+
+    <div class="stage-actions">
+      <div class="mode-switch" role="group" aria-label="Check in with">
+        @for (m of scanModes; track m.value) {
+          <button type="button" [class.active]="scanMode() === m.value"
+                  [attr.aria-pressed]="scanMode() === m.value" (click)="setScanMode(m.value)">{{ m.label }}</button>
+        }
+      </div>
+      @if (scanMode() !== 'qr') {
+        <div class="mode-switch" role="group" aria-label="Detect faces">
+          @for (d of detectionModes; track d.value) {
+            <button type="button" [class.active]="detectionMode() === d.value" [title]="d.hint"
+                    [attr.aria-pressed]="detectionMode() === d.value" (click)="setDetectionMode(d.value)">{{ d.label }}</button>
+          }
+        </div>
+      }
+      @if (!sideOpen()) { <button type="button" (click)="sideOpen.set(true)">Attendees</button> }
+      <button type="button" (click)="toggleFullscreen()">Fullscreen</button>
+      <a [routerLink]="['/scanner', eventId]">Exit</a>
+    </div>
+  </main>
+
+  @if (sideOpen()) {
+    <aside class="side" aria-label="Attendees">
+      <header class="side-head">
+        <h2>Attendees</h2>
+        <span class="side-count">{{ checkedInCount() }} / {{ attendees().length }} checked in</span>
+        <button type="button" class="side-close" (click)="sideOpen.set(false)" aria-label="Close attendees" title="Close">&times;</button>
+      </header>
+
+      <ol class="attendees">
+        @for (row of attendeeRows(); track row.id) {
+          <li class="attendee">
+            <div class="attendee-text">
+              <div class="name">{{ row.name }}</div>
+              @if (row.detail) { <div class="detail">{{ row.detail }}</div> }
+            </div>
+            <span [class]="'chip tone-' + row.tone">{{ row.label }}</span>
+          </li>
+        } @empty {
+          <li class="attendees-empty">No registrations yet.</li>
+        }
+      </ol>
+
+      @if (waiting().length) {
+        <!-- Next up, left to right: new arrivals join on the right and move left as each is shown. -->
+        <div class="queue-tray" aria-label="Waiting to be shown">
+          <ol class="queue">
+            @for (item of queuePreview(); track item.sequence) {
+              <li class="queue-item" [class.flagged]="item.result.status !== 'valid' && item.result.status !== 'already'">
+                @if (item.photo) { <img [src]="item.photo" alt="" /> }
+                <div class="name">{{ item.name }}</div>
+              </li>
+            }
+            @if (queueOverflow()) { <li class="queue-more">+{{ queueOverflow() }}</li> }
+          </ol>
+        </div>
+      }
+    </aside>
+  }
+</div>

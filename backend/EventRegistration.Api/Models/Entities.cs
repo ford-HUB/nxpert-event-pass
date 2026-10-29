@@ -123,6 +123,8 @@ public class Event
     [MaxLength(20)] public string Status { get; set; } = EventStatus.Published;
     // Max participants. null = unlimited.
     public int? Capacity { get; set; }
+    // Verify only: scanners look passes up but the server records no check-ins for this event.
+    public bool VerifyOnly { get; set; }
     // Custom registration form: JSON array of FormFieldDef. null/empty = no extra fields.
     public string? FormSchema { get; set; }
     // Optional banner image stored as a data URL (data:image/...;base64,...).
