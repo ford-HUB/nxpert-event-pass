@@ -371,6 +371,12 @@ namespace EventRegistration.Api.Migrations
                     b.Property<DateTime?>("ConfirmedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeletedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<int>("EventId")
                         .HasColumnType("int");
 
@@ -454,7 +460,7 @@ namespace EventRegistration.Api.Migrations
 
                     b.HasIndex("EventId", "SessionId", "UserId")
                         .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL");
+                        .HasFilter("[UserId] IS NOT NULL AND [DeletedAt] IS NULL");
 
                     b.ToTable("Registrations");
                 });

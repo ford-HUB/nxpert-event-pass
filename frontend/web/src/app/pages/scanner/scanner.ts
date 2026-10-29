@@ -1,7 +1,8 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, effect, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { Html5Qrcode } from 'html5-qrcode';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -121,6 +122,7 @@ const SUCCESS_STATES = new Set<BannerState>(['valid', 'verified', 'already', 'me
 @Component({
   selector: 'app-scanner',
   imports: [
+    NgTemplateOutlet,
     FormsModule,
     RouterLink,
     MatButtonModule,
@@ -239,7 +241,24 @@ export class ScannerComponent implements OnInit, OnDestroy {
   resultWelcome = signal<string | null>(null);
   resultPhoto = signal<string | null>(null);
   resultSession = signal<string | null>(null);
+  // Shared totals for the event (distinct attendees), from the database — identical on every
+  // scanner device. Never summed from this device's scans; refreshed after changes instead.
   checkedCount = signal(0);
+  registeredCount = signal(0);
+  countsReady = signal(false);
+  countSyncState = signal<'loading' | 'live' | 'stale' | 'offline'>('loading');
+  private countRequestBusy = false;
+  private countRefreshNeeded = false;
+  private countsDestroyed = false;
+  private countRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private countPollTimer: ReturnType<typeof setInterval> | null = null;
+  private watchCountConnection = effect(() => {
+    const online = this.offline.online();
+    this.offline.pending(); // Refresh after an automatic offline sync drains the queue.
+    this.realtime.connected(); // Re-fetch after a hub reconnect, covering missed pushes.
+    if (!online) this.countSyncState.set('offline');
+    if (online && this.eventId) this.requestAttendanceRefresh();
+  });
 
 
   constructor() {
@@ -250,11 +269,20 @@ export class ScannerComponent implements OnInit, OnDestroy {
         this.verifyOnly.set(n.enabled);
         if (n.enabled) this.verifiedCount.set(0);
       });
+    // Any committed attendance change for this event (from any device) refreshes the totals.
+    this.realtime.attendeesChanged$
+      .pipe(takeUntilDestroyed())
+      .subscribe((n) => {
+        if (n.eventId === this.eventId) this.requestAttendanceRefresh();
+      });
   }
 
   ngOnInit(): void {
     this.eventId = +(this.route.snapshot.paramMap.get('eventId') ?? 0);
     if (this.eventId) {
+      // Reconcile missed pushes (and other API instances without a SignalR backplane).
+      this.countPollTimer = setInterval(() => this.requestAttendanceRefresh(), 5000);
+      void this.refreshAttendanceCounts();
       this.api.getEvent(this.eventId).subscribe({
         next: (e) => {
           this.eventTitle.set(e.title);
@@ -284,7 +312,47 @@ export class ScannerComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Debounced: a burst of pushes / scans triggers one summary request.
+  private requestAttendanceRefresh(): void {
+    if (this.countsDestroyed || !this.eventId || this.countRefreshTimer) return;
+    this.countRefreshTimer = setTimeout(() => {
+      this.countRefreshTimer = null;
+      void this.refreshAttendanceCounts();
+    }, 150);
+  }
+
+  // Serialized: one request at a time; a refresh requested meanwhile runs once it finishes.
+  // Failures keep the last good snapshot and label it, rather than showing an invented zero.
+  private async refreshAttendanceCounts(): Promise<void> {
+    if (this.countsDestroyed || !this.eventId) return;
+    if (!this.offline.online()) { this.countSyncState.set('offline'); return; }
+    if (this.countRequestBusy) { this.countRefreshNeeded = true; return; }
+    this.countRequestBusy = true;
+    try {
+      const summary = await firstValueFrom(this.api.attendanceSummary(this.eventId).pipe(timeout(5000)));
+      if (this.countsDestroyed) return;
+      if (summary.eventId !== this.eventId || !Number.isInteger(summary.checkedIn) ||
+        !Number.isInteger(summary.registered) || summary.checkedIn < 0 ||
+        summary.registered < summary.checkedIn) throw new Error('Invalid attendance totals.');
+      this.checkedCount.set(summary.checkedIn);
+      this.registeredCount.set(summary.registered);
+      this.countsReady.set(true);
+      this.countSyncState.set(this.offline.online() ? 'live' : 'offline');
+    } catch {
+      if (!this.countsDestroyed) this.countSyncState.set(this.offline.online() ? 'stale' : 'offline');
+    } finally {
+      this.countRequestBusy = false;
+      if (this.countRefreshNeeded && !this.countsDestroyed) {
+        this.countRefreshNeeded = false;
+        this.requestAttendanceRefresh();
+      }
+    }
+  }
+
   ngOnDestroy(): void {
+    this.countsDestroyed = true;
+    if (this.countRefreshTimer) clearTimeout(this.countRefreshTimer);
+    if (this.countPollTimer) clearInterval(this.countPollTimer);
     if (this.resumeTimer) clearTimeout(this.resumeTimer);
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.stop();
@@ -930,7 +998,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
       photo: res.photoUrl,
       session: res.sessionTitle,
     });
-    if (res.status === 'valid') this.checkedCount.update((c) => c + 1);
+    if (res.status === 'valid') this.requestAttendanceRefresh();
     if (this.verifyOnly() && (res.status === 'verified' || res.status === 'already'))
       this.verifiedCount.update((c) => c + 1);
     // Off-window / unconfirmed scans linger a touch longer so the operator reads the reason.

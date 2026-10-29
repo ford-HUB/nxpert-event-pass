@@ -38,6 +38,7 @@ builder.Services.AddScoped<MealStubService>();
 builder.Services.AddScoped<PassService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AttendeeQuery>();
+builder.Services.AddScoped<AttendanceSummaryService>();
 builder.Services.AddSignalR();
 
 // ---- Auth ----

@@ -19,6 +19,7 @@ import { EventDto, MealDto } from '../../core/models';
 import { DynamicFieldsComponent } from '../../shared/dynamic-fields/dynamic-fields';
 import { FaceCaptureDialogComponent, FaceCaptureResult } from '../../shared/face-capture-dialog';
 import { formatPhMobile, isCompletePhMobile } from '../../shared/ph-phone';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-public-event',
@@ -39,6 +40,10 @@ import { formatPhMobile, isCompletePhMobile } from '../../shared/ph-phone';
     DynamicFieldsComponent,
   ],
   templateUrl: './public-event.html',
+  styles: [`
+    .edit-response-link { background: none; border: 0; padding: 0; font: inherit;
+      color: var(--mat-sys-primary, #006400); text-decoration: underline; cursor: pointer; }
+  `],
 })
 export class PublicEventComponent implements OnInit {
   protected auth = inject(AuthService);
@@ -149,9 +154,8 @@ export class PublicEventComponent implements OnInit {
   isAccount = signal(false);
   createdCount = signal(0);
   queuedOffline = signal(false); // registration was saved on-device pending sync
-  // Registration token for the "Edit your response" link (only when the event has form fields).
+  // Registration token for the "Edit your response" link.
   editToken = signal<string | null>(null);
-  hasFormFields = computed(() => (this.event()?.formFields?.length ?? 0) > 0);
 
   // "Lost my link" recovery (B): email/Viber the edit link to an existing registrant.
   showEditLookup = signal(false);
@@ -329,6 +333,38 @@ export class PublicEventComponent implements OnInit {
     this.createdCount.set(created);
     this.editToken.set(editToken);
     this.done.set(true);
+  }
+
+  async editSubmittedResponse(): Promise<void> {
+    if (!this.done() || this.queuedOffline() || this.editResolving()) return;
+    this.editResolving.set(true);
+    try {
+      let token = this.editToken();
+      // Older registration responses can omit editToken. Retrieve the saved
+      // registration instead of hiding the action or creating a second registration.
+      if (!token && this.isAccount()) {
+        const registrations = await firstValueFrom(this.api.myRegistrations());
+        const matches = registrations.filter((r) => r.eventId === this.event()?.id &&
+          (!this.hasSessions() || this.selectedSessions().has(r.sessionId ?? -1)));
+        token = (matches.find((r) => !r.checkedInAt) ?? matches[0])?.token ?? null;
+      } else if (!token) {
+        const result = await firstValueFrom(this.api.resolveEditToken(
+          this.slug, this.senateNo.trim(), this.attendeeName().trim(),
+        ));
+        token = result.token;
+      }
+      if (!token) {
+        this.toast.error('Could not find your submitted registration. Please try again.');
+        return;
+      }
+      this.editToken.set(token);
+      await this.router.navigate(['/r', token]);
+    } catch (err) {
+      this.toast.error((err as { error?: { message?: string } })?.error?.message ??
+        'Could not open your response. Please try again.');
+    } finally {
+      this.editResolving.set(false);
+    }
   }
 
   // ---- Optional facial registration ----

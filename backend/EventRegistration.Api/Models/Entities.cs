@@ -260,6 +260,10 @@ public class Invitation
 public class Registration
 {
     public int Id { get; set; }
+    // Soft delete: an admin removed this attendee. The row (and its attendance history) is kept,
+    // but a global query filter hides it everywhere, so its pass stops working.
+    public DateTime? DeletedAt { get; set; }
+    public int? DeletedByUserId { get; set; }
     public int EventId { get; set; }
     public Event? Event { get; set; }
     // When the event has sub-events, the registration is for a specific session; null = the

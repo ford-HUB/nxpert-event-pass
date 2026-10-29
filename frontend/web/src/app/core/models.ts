@@ -435,12 +435,16 @@ export interface RegisterResult {
   alreadyRegistered: number;
   eventTitle: string;
   attendeeName: string;
-  // Registration token for the public "edit your response" link (null when the event has no form fields).
+  // Registration token for the public "edit your response" link.
   editToken?: string | null;
 }
 
 // Public (token-scoped) registration form for the guest edit page.
 export interface PublicRegistrationForm {
+  // Guests may edit their name / email / mobile here; accounts edit them in their profile.
+  canEditIdentity: boolean;
+  email: string | null;
+  phone: string | null;
   eventTitle: string;
   sessionTitle: string | null;
   eventSlug: string;
@@ -476,6 +480,9 @@ export interface CheckInResult {
 
 export interface AttendeeDto {
   registrationId: number;
+  // Pass delivery channel and pass token (optional: older API responses omit them).
+  notificationChannel?: NotificationChannel;
+  token?: string;
   fullName: string;
   email: string;
   organization: string | null;
@@ -494,6 +501,14 @@ export interface AttendeeDto {
   mealCount: number;
   mealsRedeemedAt: string | null;
   mealsRedeemedBy: string | null;
+}
+
+// Shared scanner totals: distinct attendees checked in / registered, from the database.
+export interface EventAttendanceSummary {
+  eventId: number;
+  checkedIn: number;
+  registered: number;
+  asOf: string;
 }
 
 export interface CancelRegistrationsResult {

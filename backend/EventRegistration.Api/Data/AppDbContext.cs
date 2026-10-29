@@ -28,10 +28,15 @@ public class AppDbContext : DbContext
         b.Entity<Event>().HasIndex(e => e.PublicSlug).IsUnique();
 
         b.Entity<Registration>().HasIndex(r => r.Token).IsUnique();
-        // One account-registration per user per (event, session). SessionId is NULL for
-        // event-level registrations; guests (UserId NULL) are exempt via the filter.
+        // Soft-deleted registrations (and their meal stubs/redemptions) are hidden from every
+        // query. Use IgnoreQueryFilters() where history must still count (e.g. delete guards).
+        b.Entity<Registration>().HasQueryFilter(r => r.DeletedAt == null);
+        b.Entity<MealStub>().HasQueryFilter(s => s.Registration!.DeletedAt == null);
+        b.Entity<MealRedemption>().HasQueryFilter(m => m.Registration!.DeletedAt == null);
+        // One active account-registration per user per (event, session). SessionId is NULL for
+        // event-level registrations; guests (UserId NULL) and deleted rows are exempt via the filter.
         b.Entity<Registration>().HasIndex(r => new { r.EventId, r.SessionId, r.UserId })
-            .IsUnique().HasFilter("[UserId] IS NOT NULL");
+            .IsUnique().HasFilter("[UserId] IS NOT NULL AND [DeletedAt] IS NULL");
         // The unique index above is filtered (accounts only), so it can't serve whole-event reads.
         // This one backs the Attendance list / realtime row loads (WHERE EventId), the per-session
         // registered/checked-in counts (covered via the included columns), and the guest de-dup

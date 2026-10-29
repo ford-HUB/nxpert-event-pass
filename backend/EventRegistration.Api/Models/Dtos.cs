@@ -184,8 +184,8 @@ public record GuestRegisterRequest(string FullName, string? Email, string? Phone
     List<int>? SessionIds, Dictionary<string, string>? Responses, string? NotificationChannel,
     string? Face, string? SenateNo, string? DisplayPicture = null);
 
-// Result of a (possibly multi-session) registration submission. EditToken (when the event has
-// custom form fields) is the registration token the caller can use to build a public edit link.
+// Result of a (possibly multi-session) registration submission. EditToken lets the caller
+// build a public edit link for standard contact details and custom responses.
 public record RegisterResult(int Created, int AlreadyRegistered, string EventTitle, string AttendeeName,
     string? EditToken = null);
 
@@ -203,9 +203,14 @@ public record UpdateResponsesRequest(Dictionary<string, string>? Responses);
 
 // Public (token-scoped) registration form for the guest edit page. Editable is false once the
 // registrant has checked in or the event has ended, with LockReason explaining why.
+// CanEditIdentity: guests may also change their name / email / mobile (accounts use their profile).
 public record PublicRegistrationFormDto(
     string EventTitle, string? SessionTitle, string EventSlug, string AttendeeName,
-    List<FormFieldDef> FormFields, Dictionary<string, string> Responses, bool Editable, string? LockReason);
+    List<FormFieldDef> FormFields, Dictionary<string, string> Responses, bool Editable, string? LockReason,
+    bool CanEditIdentity, string? Email, string? Phone);
+// Identity fields are applied to guest registrations only, and only when FullName is sent.
+public record UpdatePublicResponsesRequest(Dictionary<string, string>? Responses,
+    string? FullName = null, string? Email = null, string? Phone = null);
 // Public-page recovery: "email/Viber me my edit link" for a registration on this event.
 public record EditLinkRequest(string? Contact);
 // Public-page recovery (Senate No. + registered name): verifies both and returns the edit token
@@ -231,7 +236,13 @@ public record AttendeeDto(
     int? SessionId, string? SessionTitle, string? CheckInMethod,
     DateTime? KitClaimedAt, string? KitClaimedBy,
     // Meal stubs for this registration's sub-event: total value + stub count, and redemption state.
-    decimal MealValue, int MealCount, DateTime? MealsRedeemedAt, string? MealsRedeemedBy);
+    decimal MealValue, int MealCount, DateTime? MealsRedeemedAt, string? MealsRedeemedBy,
+    // Pass token (for the admin QR pass dialog) and the channel the pass is delivered on.
+    Guid Token, string NotificationChannel);
+
+// Shared scanner totals for an event: distinct attendees checked in / registered (see
+// AttendanceSummaryService). Computed from the database, never from device counters.
+public record EventAttendanceSummaryDto(int EventId, int CheckedIn, int Registered, DateTime AsOf);
 
 // Admin app settings. CcEmails are addresses CC'd on every outgoing email.
 public record AppSettingsDto(List<string> CcEmails, string MobileProvider);

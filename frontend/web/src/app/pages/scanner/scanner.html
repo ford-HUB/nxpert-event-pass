@@ -161,7 +161,7 @@
           </button>
         }
         <span class="spacer"></span>
-        <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+        <ng-container *ngTemplateOutlet="attendanceCounter" />
       </div>
     } @else if (mode() === 'barcode') {
       <div class="barcode-block">
@@ -180,7 +180,7 @@
         <div class="scan-controls">
           <span class="muted scan-live"><mat-icon class="inline-icon pulse">sensors</mat-icon> Ready for scanner</span>
           <span class="spacer"></span>
-          <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+          <ng-container *ngTemplateOutlet="attendanceCounter" />
         </div>
       </div>
     } @else {
@@ -214,7 +214,7 @@
           </button>
         }
         <span class="spacer"></span>
-        <span class="count-chip"><mat-icon class="inline-icon">how_to_reg</mat-icon> {{ checkedCount() }} checked in</span>
+        <ng-container *ngTemplateOutlet="attendanceCounter" />
       </div>
     }
   </div>
@@ -343,3 +343,25 @@
   </div>
 </div>
 
+
+<!-- Shared event totals (database snapshot), with an explicit label when they may be outdated. -->
+<ng-template #attendanceCounter>
+  <span class="count-chip attendance-total" aria-live="polite" aria-atomic="true">
+    <mat-icon class="inline-icon">how_to_reg</mat-icon>
+    <span class="attendance-lines">
+      @if (countsReady()) {
+        <strong>{{ checkedCount() }} checked in / {{ registeredCount() }} registered</strong>
+      } @else {
+        <strong>{{ countSyncState() === 'loading' ? 'Loading attendance…' : 'Attendance totals unavailable' }}</strong>
+      }
+      @if (countSyncState() === 'offline') {
+        <small>Offline — totals update after syncing</small>
+      } @else if (countSyncState() === 'stale') {
+        <small>Connection interrupted — totals may be outdated</small>
+      }
+      @if (offline.pending() > 0 && countSyncState() !== 'offline') {
+        <small>This device has changes waiting to sync</small>
+      }
+    </span>
+  </span>
+</ng-template>

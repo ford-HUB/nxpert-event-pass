@@ -119,10 +119,12 @@
               </p>
             }
 
-            @if (editToken() && hasFormFields()) {
-              <a mat-stroked-button class="top-gap" [routerLink]="['/r', editToken()]">
-                <mat-icon>edit</mat-icon> Edit your response
-              </a>
+            @if (!queuedOffline()) {
+              <button mat-stroked-button type="button" class="top-gap"
+                      (click)="editSubmittedResponse()" [disabled]="editResolving()">
+                <mat-icon>edit</mat-icon>
+                {{ editResolving() ? 'Opening your response…' : 'Edit Your Response' }}
+              </button>
             }
 
             @if (isAccount()) {
@@ -384,8 +386,11 @@
             to auto-fill and track this in <em>My Events</em>.
           </p>
 
-          <!-- Recovery (B): resend the edit link to an existing registrant -->
-          @if (hasFormFields()) {
+
+        }
+
+        @if (!done()) {
+        <!-- Existing attendees can recover their event-specific edit link. -->
             <hr class="divider" />
             @if (editLinkSent()) {
               <p class="muted fine-print">
@@ -395,7 +400,8 @@
             } @else if (!showEditLookup()) {
               <p class="muted fine-print">
                 Already registered?
-                <a href="javascript:void(0)" (click)="showEditLookup.set(true)">Edit your response</a>.
+                <button type="button" class="edit-response-link" (click)="showEditLookup.set(true)"
+                        [attr.aria-expanded]="showEditLookup()">Edit your response</button>.
               </p>
             } @else {
               <p class="muted no-account-note">
@@ -434,7 +440,6 @@
                 <mat-icon>send</mat-icon> Send my edit link
               </button>
             }
-          }
         }
       </mat-card-content>
     }

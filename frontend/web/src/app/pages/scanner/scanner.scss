@@ -141,6 +141,13 @@
   gap: 4px;
 }
 
+.attendance-total { text-align: left; }
+.attendance-lines {
+  display: inline-flex;
+  flex-direction: column;
+  small { font-size: 0.8em; font-weight: 400; opacity: 0.8; }
+}
+
 .count-chip {
   display: inline-flex;
   align-items: center;

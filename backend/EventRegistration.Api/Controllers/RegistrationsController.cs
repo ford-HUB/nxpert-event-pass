@@ -110,12 +110,13 @@ public class RegistrationsController : ControllerBase
         return Ok(new PublicRegistrationFormDto(
             reg.Event!.Title, reg.Session?.Title, reg.Event.PublicSlug, reg.DisplayName,
             FormJson.ReadSchema(reg.Event.FormSchema),
-            FormJson.ReadResponses(reg.FormResponses), editable, reason));
+            FormJson.ReadResponses(reg.FormResponses), editable, reason,
+            reg.UserId == null, reg.DisplayEmail, reg.DisplayPhone));
     }
 
     [HttpPut("public/{token:guid}/responses")]
     [AllowAnonymous]
-    public async Task<IActionResult> PublicUpdateResponses(Guid token, UpdateResponsesRequest req)
+    public async Task<IActionResult> PublicUpdateResponses(Guid token, UpdatePublicResponsesRequest req)
     {
         var reg = await _db.Registrations
             .Include(r => r.Event).Include(r => r.Session)
@@ -124,6 +125,21 @@ public class RegistrationsController : ControllerBase
 
         var (editable, reason) = EditState(reg);
         if (!editable) return BadRequest(new { message = reason });
+
+        // Guests may also correct their name / email / mobile; accounts edit these in their profile.
+        string? name = null, email = null, phone = null;
+        if (reg.UserId == null && req.FullName is not null)
+        {
+            name = req.FullName.Trim();
+            email = req.Email?.Trim().ToLowerInvariant();
+            phone = NormalizePhMobile(req.Phone ?? "");
+            if (name.Length < 2 || name.Length > 200)
+                return BadRequest(new { message = "Enter your name (2 to 200 characters)." });
+            if (string.IsNullOrWhiteSpace(email) || email.Length > 256 || !IsValidEmail(email))
+                return BadRequest(new { message = "Please enter a valid email address." });
+            if (phone is null)
+                return BadRequest(new { message = "Please enter a valid Philippine mobile number (+63 9XX XXX XXXX)." });
+        }
 
         var missing = FormJson.FirstMissingRequired(FormJson.ReadSchema(reg.Event!.FormSchema), req.Responses);
         if (missing is not null)
@@ -135,13 +151,25 @@ public class RegistrationsController : ControllerBase
         // guest member by Senate No.), so their answers stay consistent across sub-events — and so
         // editing one member never touches other members who share the same email/phone.
         var siblings = await _db.Registrations
+            .Include(r => r.Event).Include(r => r.Session)
             .Where(r => r.EventId == reg.EventId && (
                 (reg.UserId != null && r.UserId == reg.UserId) ||
                 (reg.UserId == null && r.UserId == null &&
                     reg.GuestSenateNo != null && r.GuestSenateNo == reg.GuestSenateNo)))
             .ToListAsync();
         if (siblings.Count == 0) siblings.Add(reg);
-        foreach (var s in siblings) s.FormResponses = json;
+        // Preserve locked sub-event registrations (checked in / ended) even when a sibling is editable.
+        foreach (var s in siblings)
+        {
+            if (!EditState(s).Editable) continue;
+            s.FormResponses = json;
+            if (name is not null)
+            {
+                s.GuestFullName = name;
+                s.GuestEmail = email;
+                s.GuestPhone = phone;
+            }
+        }
 
         await _db.SaveChangesAsync();
         await _notify.AttendeesChangedAsync(reg.EventId, siblings.Select(s => s.Id));
@@ -158,7 +186,7 @@ public class RegistrationsController : ControllerBase
 
         var contact = (req.Contact ?? "").Trim();
         var ev = await _db.Events.FirstOrDefaultAsync(e => e.PublicSlug == slug);
-        if (ev is null || contact.Length == 0 || FormJson.ReadSchema(ev.FormSchema).Count == 0)
+        if (ev is null || contact.Length == 0)
             return generic;
 
         var baseQuery = _db.Registrations
@@ -214,7 +242,7 @@ public class RegistrationsController : ControllerBase
         // Also require the registered name to match (case-insensitive, whitespace-normalized).
         var reg = matches
             .Where(r => string.Equals(CollapseSpaces(r.DisplayName), name, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(r => r.Id)
+            .OrderBy(r => EditState(r).Editable ? 0 : 1).ThenBy(r => r.Id)
             .FirstOrDefault();
 
         // Generic failure so a wrong Senate No. and a wrong name are indistinguishable — no probing.
@@ -304,10 +332,10 @@ public class RegistrationsController : ControllerBase
     }
 
     // The registration token the caller can use to build a public "edit your response" link —
-    // only when the event has editable form fields; null otherwise. Guests are keyed by Senate No.
+    // includes events without custom fields (guests can still edit contact details). Guests are
+    // keyed by Senate No.
     private async Task<string?> EditTokenForAsync(Event ev, int? userId, string? guestSenate)
     {
-        if (FormJson.ReadSchema(ev.FormSchema).Count == 0) return null;
         var q = _db.Registrations.Where(r => r.EventId == ev.Id);
         q = userId is int uid
             ? q.Where(r => r.UserId == uid)

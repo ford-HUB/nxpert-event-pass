@@ -36,10 +36,9 @@ public class PassService
 
     private string FrontendBase => _config["App:FrontendBaseUrl"]?.TrimEnd('/') ?? "http://localhost:4200";
 
-    // Public "edit your response" link for a registration — only meaningful when the event has
-    // custom form fields to edit; null otherwise (so we don't offer a link to an empty form).
-    public string? EditUrl(Event ev, Registration reg) =>
-        FormJson.ReadSchema(ev.FormSchema).Count > 0 ? $"{FrontendBase}/r/{reg.Token}" : null;
+    // Public "edit your response" link, including events with only the standard contact fields.
+    public string EditUrl(Event ev, Registration reg) =>
+        $"{FrontendBase}/r/{reg.Token}";
 
     /// <summary>
     /// Sends the "registration confirmed" pass to the registrant over their preferred channel
@@ -47,8 +46,9 @@ public class PassService
     /// <see cref="Registration.PassEmailSentAt"/>. Falls back to email when Viber is preferred
     /// but no phone is on file. Returns how it was delivered. Does not call SaveChanges.
     /// Requires <c>reg.User</c> and <c>reg.Session</c> to be loaded.
+    /// Set <c>emailOnly</c> for an explicit email resend instead of the preferred channel.
     /// </summary>
-    public async Task<PassDelivery> SendConfirmationAsync(Event ev, Registration reg)
+    public async Task<PassDelivery> SendConfirmationAsync(Event ev, Registration reg, bool emailOnly = false)
     {
         // For a sub-event registration, the pass shows the session's title/time/venue.
         var title = reg.Session is not null ? $"{ev.Title} — {reg.Session.Title}" : ev.Title;
@@ -71,7 +71,8 @@ public class PassService
         static string ValidityFor(MealStub s) => MealStubImageService.ValidityLabel(s.ValidFrom, s.ValidTo);
 
         var editUrl = EditUrl(ev, reg);
-        var channel = reg.User?.NotificationChannel ?? reg.GuestNotificationChannel ?? NotificationChannels.Email;
+        var channel = emailOnly ? NotificationChannels.Email
+            : reg.User?.NotificationChannel ?? reg.GuestNotificationChannel ?? NotificationChannels.Email;
         var phone = reg.DisplayPhone;
         var email = reg.DisplayEmail;
         var sentViber = false;
@@ -234,7 +235,6 @@ public class PassService
     public async Task<PassDelivery> SendEditLinkAsync(Event ev, Registration reg)
     {
         var url = EditUrl(ev, reg);
-        if (url is null) return PassDelivery.NotSent; // event has no editable form fields
         var name = reg.DisplayName;
         var subject = $"Edit your registration — {ev.Title}";
 

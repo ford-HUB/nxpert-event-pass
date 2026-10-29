@@ -34,6 +34,9 @@ public class AttendeeQuery
                 Organization = r.User != null ? r.User.Organization : null,
                 SenateNo = r.User != null ? r.User.SenateNo : r.GuestSenateNo,
                 Phone = r.User != null ? r.User.Phone : r.GuestPhone,
+                NotificationChannel = r.User != null ? r.User.NotificationChannel
+                    : (r.GuestNotificationChannel ?? NotificationChannels.Email),
+                r.Token,
                 r.RegisteredAt, r.ConfirmedAt, r.CheckedInAt, r.CheckInMethod,
                 r.KitClaimedAt, r.KitClaimedBy,
                 r.MealsRedeemedAt, r.MealsRedeemedBy,
@@ -71,7 +74,7 @@ public class AttendeeQuery
                 FormJson.ReadResponses(r.FormResponses),
                 r.SessionId, r.SessionTitle, r.CheckInMethod,
                 r.KitClaimedAt, r.KitClaimedBy,
-                mealValue, mealCount, r.MealsRedeemedAt, r.MealsRedeemedBy);
+                mealValue, mealCount, r.MealsRedeemedAt, r.MealsRedeemedBy, r.Token, r.NotificationChannel);
         }).ToList();
     }
 }

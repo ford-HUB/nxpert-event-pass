@@ -17,18 +17,91 @@ public class AttendanceController : ControllerBase
     private readonly PassService _pass;
     private readonly NotificationService _notify;
     private readonly AttendeeQuery _attendees;
-    public AttendanceController(AppDbContext db, PassService pass, NotificationService notify, AttendeeQuery attendees)
+    private readonly AttendanceSummaryService _summary;
+    public AttendanceController(AppDbContext db, PassService pass, NotificationService notify, AttendeeQuery attendees,
+        AttendanceSummaryService summary)
     {
         _db = db;
         _pass = pass;
         _notify = notify;
         _attendees = attendees;
+        _summary = summary;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AttendeeDto>>> List(int eventId)
     {
         return Ok(await _attendees.LoadAsync(eventId));
+    }
+
+    // Shared scanner totals: distinct attendees checked in / registered, straight from the database.
+    [HttpGet("summary")]
+    public async Task<ActionResult<EventAttendanceSummaryDto>> Summary(int eventId)
+    {
+        if (!await _db.Events.AnyAsync(e => e.Id == eventId)) return NotFound();
+        return Ok(await _summary.GetAsync(eventId));
+    }
+
+    // ---- Delete attendee (admin): soft delete — the pass stops working, history is retained ----
+    [HttpDelete("{registrationId:int}")]
+    [Authorize(Roles = Roles.Admin + "," + Roles.SuperAdmin)]
+    public async Task<IActionResult> SoftDelete(int eventId, int registrationId)
+    {
+        // Include deleted rows so retrying a successful delete remains harmless.
+        var reg = await _db.Registrations.IgnoreQueryFilters()
+            .Include(r => r.Event).Include(r => r.User).Include(r => r.Session)
+            .SingleOrDefaultAsync(r => r.EventId == eventId && r.Id == registrationId);
+        if (reg is null) return NotFound();
+        if (reg.DeletedAt is not null) return NoContent();
+
+        reg.DeletedAt = DateTime.UtcNow;
+        reg.DeletedByUserId = this.UserId();
+        await _db.SaveChangesAsync();
+        await _notify.AttendeesChangedAsync(eventId, Array.Empty<int>(), new[] { reg.Id });
+        await _notify.FaceGalleryChangedAsync(eventId);
+
+        // A confirmed online / hybrid registration had a calendar invite — withdraw it.
+        if (reg.Event is not null && EventFormats.HasOnline(reg.Event.Format))
+        {
+            try { await _pass.SendMeetingCancelAsync(reg.Event, reg, MeetingCancelReason.RegistrationCancelled); }
+            catch { /* the delete itself succeeded; the calendar update is best-effort */ }
+        }
+        return NoContent();
+    }
+
+    // The attendee's pass token, for the QR pass dialog when the grid row came from an older response.
+    [HttpGet("{registrationId:int}/pass")]
+    public async Task<IActionResult> GetPass(int eventId, int registrationId)
+    {
+        var pass = await _db.Registrations
+            .Where(r => r.EventId == eventId && r.Id == registrationId)
+            .Select(r => new
+            {
+                r.Token,
+                Email = r.User != null ? r.User.Email : r.GuestEmail,
+                r.ConfirmedAt,
+            })
+            .SingleOrDefaultAsync();
+        if (pass is null) return NotFound();
+        return Ok(pass);
+    }
+
+    // Resend the pass to the stored registration email, regardless of the preferred delivery channel.
+    [HttpPost("{registrationId:int}/resend-pass")]
+    public async Task<IActionResult> ResendPass(int eventId, int registrationId)
+    {
+        var reg = await _db.Registrations
+            .Include(r => r.Event).Include(r => r.User).Include(r => r.Session)
+            .FirstOrDefaultAsync(r => r.EventId == eventId && r.Id == registrationId);
+        if (reg is null) return NotFound();
+        if (reg.ConfirmedAt is null)
+            return BadRequest(new { message = "Confirm this registration before emailing the pass." });
+        if (string.IsNullOrWhiteSpace(reg.DisplayEmail))
+            return BadRequest(new { message = "This attendee has no registered email address." });
+
+        await _pass.SendConfirmationAsync(reg.Event!, reg, emailOnly: true);
+        await _db.SaveChangesAsync();
+        return Ok(new { message = $"QR pass sent to {reg.DisplayEmail}." });
     }
 
     // ---- Manual check-in: admin marks selected registrations as attended ----
@@ -588,7 +661,7 @@ public class AttendanceController : ControllerBase
 
         var sb = new StringBuilder();
         // Base columns + one column per custom form field.
-        var header = new List<string> { "Full Name", "Email", "Organization", "Sub-event", "Registered At", "Checked In At", "Check-in Method", "Status", "Kit Claimed At", "Kit Claimed By", "Meal Value", "Meals Redeemed At", "Meals Redeemed By" };
+        var header = new List<string> { "Full Name", "Email", "Organization", "Pass via", "Sub-events", "Registered At", "Checked In At", "Check-in Method", "Status", "Kit Claimed At", "Kit Claimed By", "Meal Value", "Meals Redeemed At", "Meals Redeemed By" };
         header.AddRange(fields.Select(f => f.Label));
         sb.AppendLine(string.Join(",", header.Select(Csv)));
 
@@ -596,7 +669,7 @@ public class AttendanceController : ControllerBase
         {
             var row = new List<string>
             {
-                a.FullName, a.Email, a.Organization ?? "", a.SessionTitle ?? "",
+                a.FullName, a.Email, a.Organization ?? "", a.NotificationChannel, a.SessionTitle ?? "(whole event)",
                 a.RegisteredAt.ToString("u"),
                 a.CheckedInAt?.ToString("u") ?? "",
                 a.CheckInMethod ?? "",

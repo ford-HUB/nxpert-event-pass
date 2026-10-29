@@ -30,7 +30,7 @@
             <h2>Editing closed</h2>
             <p class="muted">{{ f.lockReason }}</p>
           </div>
-        } @else if (f.formFields.length === 0) {
+        } @else if (f.formFields.length === 0 && !f.canEditIdentity) {
           <div class="success-block">
             <mat-icon class="big-check">info</mat-icon>
             <h2>Nothing to edit</h2>
@@ -40,6 +40,24 @@
           <h3 class="form-heading">Update your response</h3>
           <p class="muted no-account-note">Change any of your answers below, then save.</p>
 
+          @if (f.canEditIdentity) {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Full name</mat-label>
+              <input matInput name="fullName" [(ngModel)]="fullName" required maxlength="200" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Email</mat-label>
+              <input matInput name="email" type="email" [(ngModel)]="email" required maxlength="256" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Mobile number</mat-label>
+              <input matInput name="phone" type="tel" [ngModel]="phone"
+                     (ngModelChange)="phone = formatPhone($event)" placeholder="+63 9XX XXX XXXX" required />
+            </mat-form-field>
+          } @else {
+            <p class="muted">Your name and contact details are managed in your account profile.</p>
+          }
+
           <app-dynamic-fields #dyn [fields]="f.formFields" [initial]="f.responses"></app-dynamic-fields>
 
           <button
@@ -47,7 +65,7 @@
             color="primary"
             class="full-width"
             (click)="save()"
-            [disabled]="saving() || !dyn.isValid()"
+            [disabled]="saving() || !identityValid() || !dyn.isValid()"
           >
             <mat-icon>save</mat-icon> Save changes
           </button>

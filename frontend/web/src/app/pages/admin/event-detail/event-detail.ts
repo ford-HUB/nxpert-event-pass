@@ -24,6 +24,7 @@ import { AuthService } from '../../../core/auth.service';
 import { ToastService } from '../../../core/toast.service';
 import { ConfirmService } from '../../../core/confirm.service';
 import { RealtimeService } from '../../../core/realtime.service';
+import { AttendeePassDialogComponent } from '../../../shared/attendee-pass-dialog';
 import { AttendeeDto, ContactDto, EventDto, EventFeedbackSummary, MealBoardDto, MealBoardRow, MealStubDetailDto } from '../../../core/models';
 import { ImageViewerDialogComponent } from '../../../shared/image-viewer/image-viewer-dialog';
 import { KitClaimDialogComponent, KitClaimResult } from '../../../shared/kit-claim-dialog';
@@ -53,6 +54,17 @@ import { ViberBroadcastDialogComponent } from '../../../shared/viber-broadcast-d
     MatProgressSpinnerModule,
   ],
   templateUrl: './event-detail.html',
+  styles: [`
+    .attendee-delete:not(:disabled) { color: #f5222d; }
+    .delivery-badges { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
+    .delivery-badge, .session-badge { display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 16px; font-size: 12px; font-weight: 600; }
+    .delivery-badge { background: #e7f0ff; color: #1769d2; }
+    .delivery-badge.viber { background: #f0eaff; color: #6841a5; }
+    .delivery-badge mat-icon { width: 14px; height: 14px; font-size: 14px; }
+    .session-badge { background: #d5fae4; color: #187c43; }
+    .session-checkin { display: block; margin: 4px 0 8px; font-size: 12px; color: var(--mat-sys-on-surface-variant); }
+  `],
 })
 export class EventDetailComponent implements OnInit {
   private api = inject(ApiService);
@@ -90,6 +102,57 @@ export class EventDetailComponent implements OnInit {
   confirming = signal(false);
   checkingIn = signal(false);
   cancelling = signal(false);
+  deletingAttendees = signal<Set<number>>(new Set());
+
+  // Admin: soft-delete one attendee. Their pass stops working; the registration history is kept.
+  async deleteAttendee(attendee: AttendeeDto): Promise<void> {
+    if (!this.auth.isAdmin() || this.deletingAttendees().has(attendee.registrationId)) return;
+    this.deletingAttendees.update((ids) => new Set(ids).add(attendee.registrationId));
+    const clearBusy = () => this.deletingAttendees.update((ids) => {
+      const next = new Set(ids);
+      next.delete(attendee.registrationId);
+      return next;
+    });
+    const confirmed = await this.confirmer.confirm({
+      title: 'Delete attendee?',
+      message: `Remove ${attendee.fullName} from this event? Their QR pass will stop working. The registration and attendance history will be retained.`,
+      confirmText: 'Delete attendee',
+      cancelText: 'Keep attendee',
+      tone: 'error',
+      icon: 'delete',
+    });
+    if (!confirmed) { clearBusy(); return; }
+
+    this.api.deleteAttendee(this.id, attendee.registrationId).subscribe({
+      next: () => {
+        clearBusy();
+        this.attendees.update((rows) => rows.filter((r) => r.registrationId !== attendee.registrationId));
+        for (const selection of [this.selectedAttendees, this.selectedKits, this.selectedMeals]) {
+          selection.update((ids) => {
+            const next = new Set(ids);
+            next.delete(attendee.registrationId);
+            return next;
+          });
+        }
+        this.toast.success('Attendee deleted. Registration history retained.');
+        this.reload();
+      },
+      error: (err) => {
+        clearBusy();
+        this.toast.error(err?.error?.message ?? 'Could not delete the attendee. Please try again.');
+      },
+    });
+  }
+
+  showAttendeePass(attendee: AttendeeDto): void {
+    const event = this.event();
+    if (!event) return;
+    this.dialog.open(AttendeePassDialogComponent, {
+      data: { eventId: this.id, eventTitle: event.title, attendee },
+      width: '440px',
+      maxWidth: '95vw',
+    });
+  }
 
   // Kit claiming: its own selection + filters, independent of the attendance tab.
   selectedKits = signal<Set<number>>(new Set());
@@ -162,7 +225,7 @@ export class EventDetailComponent implements OnInit {
     if (q) {
       list = list.filter((a) => {
         const responses = a.responses ? Object.values(a.responses).join(' ') : '';
-        return [a.fullName, a.email, a.organization ?? '', a.sessionTitle ?? '', responses]
+        return [a.fullName, a.email, a.organization ?? '', a.sessionTitle ?? '(whole event)', a.notificationChannel ?? '', responses]
           .join(' ')
           .toLowerCase()
           .includes(q);
@@ -187,6 +250,8 @@ export class EventDetailComponent implements OnInit {
         return a.fullName.localeCompare(b.fullName);
       case 'email':
         return a.email.localeCompare(b.email);
+      case 'passVia':
+        return (a.notificationChannel ?? '').localeCompare(b.notificationChannel ?? '');
       case 'organization':
         return (a.organization ?? '').localeCompare(b.organization ?? '');
       case 'senate':
@@ -243,8 +308,9 @@ export class EventDetailComponent implements OnInit {
   formFields = computed(() => this.event()?.formFields ?? []);
   displayedColumns = computed(() => {
     const cols = [...this.baseColumns];
-    if (this.hasSessions()) cols.splice(cols.indexOf('email') + 1, 0, 'session');
-    return [...cols, ...this.formFields().map((f) => 'ff_' + f.key)];
+    cols.splice(cols.indexOf('email') + 1, 0, 'passVia', 'session');
+    return [...cols, ...this.formFields().map((f) => 'ff_' + f.key), 'pass',
+      ...(this.auth.isAdmin() ? ['delete'] : [])];
   });
   colId(key: string): string {
     return 'ff_' + key;

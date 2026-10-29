@@ -295,7 +295,7 @@ public class EventsController : ControllerBase
 
         foreach (var s in e.Sessions.Where(s => s.Id > 0 && !keep.Contains(s.Id)).ToList())
         {
-            if (await _db.Registrations.AnyAsync(r => r.SessionId == s.Id))
+            if (await _db.Registrations.IgnoreQueryFilters().AnyAsync(r => r.SessionId == s.Id))
                 return $"Can't remove sub-event '{s.Title}' — it already has registrations.";
             // Meal→Session is NoAction, so remove the session's stubs first.
             _db.Meals.RemoveRange(e.Meals.Where(m => m.SessionId == s.Id));

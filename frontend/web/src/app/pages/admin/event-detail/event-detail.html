@@ -284,9 +284,28 @@
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
                 <td mat-cell *matCellDef="let a">{{ a.email }}</td>
               </ng-container>
+              <ng-container matColumnDef="passVia">
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Pass via</th>
+                <td mat-cell *matCellDef="let a">
+                  <div class="delivery-badges">
+                    @if (a.notificationChannel === 'Email' || a.notificationChannel === 'Both') {
+                      <span class="delivery-badge"><mat-icon>email</mat-icon> Email</span>
+                    }
+                    @if (a.notificationChannel === 'Viber' || a.notificationChannel === 'Both') {
+                      <span class="delivery-badge viber"><mat-icon>chat</mat-icon> Viber</span>
+                    }
+                    @if (!a.notificationChannel) { <span class="muted">—</span> }
+                  </div>
+                </td>
+              </ng-container>
               <ng-container matColumnDef="session">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-event</th>
-                <td mat-cell *matCellDef="let a">{{ a.sessionTitle || '—' }}</td>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-events</th>
+                <td mat-cell *matCellDef="let a">
+                  <span class="session-badge">{{ a.sessionTitle || '(whole event)' }}</span>
+                  <span class="session-checkin" matTooltip="Check-in status for this registration">
+                    {{ a.checkedInAt ? '1/1' : '0/1' }} in
+                  </span>
+                </td>
               </ng-container>
               <ng-container matColumnDef="registered">
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>Registered</th>
@@ -331,6 +350,31 @@
                   </td>
                 </ng-container>
               }
+
+              <ng-container matColumnDef="pass">
+                <th mat-header-cell *matHeaderCellDef>Pass</th>
+                <td mat-cell *matCellDef="let a">
+                  <button mat-icon-button type="button"
+                          (click)="showAttendeePass(a)"
+                          [attr.aria-label]="'Show QR pass for ' + a.fullName"
+                          matTooltip="Show QR pass">
+                    <mat-icon>qr_code_2</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="delete">
+                <th mat-header-cell *matHeaderCellDef>Delete</th>
+                <td mat-cell *matCellDef="let a">
+                  <button mat-icon-button type="button" class="attendee-delete"
+                          (click)="deleteAttendee(a)"
+                          [disabled]="deletingAttendees().has(a.registrationId)"
+                          [attr.aria-label]="'Delete attendee ' + a.fullName"
+                          matTooltip="Delete attendee (keep history)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
 
               <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
               <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>

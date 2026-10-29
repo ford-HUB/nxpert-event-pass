@@ -1,13 +1,15 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { API_BASE } from './config';
+import { SKIP_ERROR_TOAST } from './error.interceptor';
 import {
   AdminUserUpsert,
   AppSettingsDto,
   MobileProvider,
   AuthResponse,
   AttendeeDto,
+  EventAttendanceSummary,
   CheckInOptions,
   CheckInResult,
   ClaimKitResult,
@@ -179,10 +181,12 @@ export class ApiService {
   getPublicRegistration(token: string): Observable<PublicRegistrationForm> {
     return this.http.get<PublicRegistrationForm>(this.url(`/api/registrations/public/${token}`));
   }
-  updatePublicResponses(token: string, responses: Record<string, string>): Observable<{ message: string }> {
+  // `identity` (guests only) also updates the registrant's name / email / mobile.
+  updatePublicResponses(token: string, responses: Record<string, string>,
+    identity?: { fullName: string; email: string; phone: string }): Observable<{ message: string }> {
     return this.http.put<{ message: string }>(
       this.url(`/api/registrations/public/${token}/responses`),
-      { responses },
+      { responses, ...identity },
     );
   }
   // Public recovery: email/Viber the registrant their edit link for this event.
@@ -254,6 +258,29 @@ export class ApiService {
   // ---- Attendance ----
   attendance(eventId: number): Observable<AttendeeDto[]> {
     return this.http.get<AttendeeDto[]>(this.url(`/api/events/${eventId}/attendance`));
+  }
+  // Scanner totals; polled in the background, so failures are reported inline, not as toasts.
+  attendanceSummary(eventId: number): Observable<EventAttendanceSummary> {
+    return this.http.get<EventAttendanceSummary>(this.url(`/api/events/${eventId}/attendance/summary`), {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  // Admin: soft-delete an attendee — the pass stops working, the registration history is kept.
+  deleteAttendee(eventId: number, registrationId: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/events/${eventId}/attendance/${registrationId}`));
+  }
+  getAttendeePass(eventId: number, registrationId: number): Observable<{
+    token: string; email: string | null; confirmedAt: string | null;
+  }> {
+    return this.http.get<{ token: string; email: string | null; confirmedAt: string | null }>(
+      this.url(`/api/events/${eventId}/attendance/${registrationId}/pass`),
+    );
+  }
+  // Re-email a confirmed attendee's pass to their registered address (ignores the Viber preference).
+  resendAttendeePass(eventId: number, registrationId: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(
+      this.url(`/api/events/${eventId}/attendance/${registrationId}/resend-pass`), {},
+    );
   }
   // Admin: remove pending registrations (confirmed / checked-in ones are skipped server-side).
   cancelRegistrations(eventId: number, registrationIds: number[]): Observable<CancelRegistrationsResult> {

@@ -393,7 +393,7 @@ public class UsersController : ControllerBase
         if (user is null) return NotFound();
 
         // Registrations reference the user with a restrict delete — block rather than cascade.
-        if (await _db.Registrations.AnyAsync(r => r.UserId == id))
+        if (await _db.Registrations.IgnoreQueryFilters().AnyAsync(r => r.UserId == id))
             return BadRequest(new { message = "This user has event registrations and can't be deleted." });
 
         _db.Users.Remove(user);
