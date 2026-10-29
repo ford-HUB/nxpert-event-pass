@@ -1,0 +1,155 @@
+<div class="invite-grid" [attr.aria-busy]="sending()">
+  <div class="invite-main">
+    <div class="section-head">
+      <div>
+        <h3>Compose invitation</h3>
+        <p class="muted">
+          Pick system users or type email addresses. Use <strong>&#64;n-pax</strong> to include all
+          {{ directoryCount }} system users.
+        </p>
+      </div>
+      @if (counts.to.length + counts.cc.length > 0) {
+        <span class="status-pill ok">{{ counts.to.length + counts.cc.length }} recipient{{ counts.to.length + counts.cc.length === 1 ? '' : 's' }}</span>
+      }
+    </div>
+
+    <fieldset [disabled]="sending()">
+      @for (field of fields; track field) {
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>{{ field === 'to' ? 'To' : 'CC' }}</mat-label>
+          <mat-chip-grid #grid [attr.aria-label]="field === 'to' ? 'To recipients' : 'CC recipients'">
+            @for (address of recipients[field]; track address) {
+              <mat-chip-row (removed)="remove(field, address)" [disabled]="sending()"
+                            [class.group-chip]="address === allUsers"
+                            [matTooltip]="address === allUsers ? 'Expands to all current system users when sent' : address">
+                {{ label(address) }}
+                <button matChipRemove [attr.aria-label]="'Remove ' + address"><mat-icon>cancel</mat-icon></button>
+              </mat-chip-row>
+            }
+            <input [matChipInputFor]="grid" [matAutocomplete]="options" #trigger="matAutocompleteTrigger"
+                   [(ngModel)]="query[field]" [name]="field" placeholder="Name, email, or @n-pax"
+                   (keydown)="key($event, field, trigger)" (paste)="pasteRecipients($event, field)"
+                   [disabled]="sending()" />
+          </mat-chip-grid>
+          <mat-autocomplete #options="matAutocomplete" (optionSelected)="add(field, $event.option.value)">
+            @if (showGroup(field)) {
+              <mat-option [value]="allUsers"><strong>&#64;n-pax</strong> · All system users ({{ directoryCount }})</mat-option>
+            }
+            @for (contact of suggestions(field); track contact.id) {
+              <mat-option [value]="contact.email">
+                <span class="contact-name">{{ contact.fullName }}</span>
+                <span class="contact-meta">{{ contact.email }}@if (contact.organization) { · {{ contact.organization }} }</span>
+              </mat-option>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+        <mat-label>Subject</mat-label>
+        <input matInput [(ngModel)]="subject" name="subject" maxlength="200" [disabled]="sending()" />
+      </mat-form-field>
+
+      <div class="message-box">
+        <div class="format-toolbar" role="toolbar" aria-label="Message formatting" (mousedown)="$event.preventDefault()">
+          <button type="button" mat-icon-button aria-label="Bold" matTooltip="Bold" (click)="format('bold')"><mat-icon>format_bold</mat-icon></button>
+          <button type="button" mat-icon-button aria-label="Italic" matTooltip="Italic" (click)="format('italic')"><mat-icon>format_italic</mat-icon></button>
+          <button type="button" mat-icon-button aria-label="Underline" matTooltip="Underline" (click)="format('underline')"><mat-icon>format_underlined</mat-icon></button>
+          <span class="toolbar-sep" aria-hidden="true"></span>
+          <button type="button" mat-icon-button aria-label="Bullet list" matTooltip="Bullet list" (click)="format('insertUnorderedList')"><mat-icon>format_list_bulleted</mat-icon></button>
+          <button type="button" mat-icon-button aria-label="Numbered list" matTooltip="Numbered list" (click)="format('insertOrderedList')"><mat-icon>format_list_numbered</mat-icon></button>
+          <span class="toolbar-sep" aria-hidden="true"></span>
+          <button type="button" mat-icon-button aria-label="Insert link" matTooltip="Insert link" (click)="linkOpen = !linkOpen"><mat-icon>link</mat-icon></button>
+          <button type="button" mat-icon-button aria-label="Insert inline image" matTooltip="Insert image" [disabled]="processingImage()" (click)="imageInput.click()"><mat-icon>add_photo_alternate</mat-icon></button>
+          <input #imageInput type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden (change)="imagePicked($event)" />
+        </div>
+        @if (linkOpen) {
+          <div class="link-row">
+            <input aria-label="Link URL" placeholder="https://example.com" [(ngModel)]="linkUrl" name="linkUrl"
+                   (keydown.enter)="insertLink(); $event.preventDefault()" />
+            <button type="button" mat-stroked-button (click)="insertLink()">Insert link</button>
+          </div>
+        }
+        <div #editor class="message-editor" [attr.contenteditable]="!sending()" role="textbox"
+             aria-label="Invitation message" aria-multiline="true"
+             data-placeholder="Write your invitation here. Insert an image between paragraphs using the image button."
+             (keyup)="rememberSelection()" (mouseup)="rememberSelection()" (blur)="rememberSelection()" (input)="rememberSelection()"
+             (paste)="pasteBody($event)" (drop)="$event.preventDefault()" (input)="syncPreview()"></div>
+      </div>
+      <p class="hint">
+        {{ processingImage() ? 'Preparing image…' : 'Images: up to 5, 2 MB each and 5 MB total after resizing. Pasted text arrives plain — format it with the toolbar.' }}
+      </p>
+    </fieldset>
+  </div>
+
+  <!-- Summary: recipient counts and a small live preview of the email as recipients get it
+       (your message, then the event card and calendar invitation the server appends). -->
+  <aside class="invite-side">
+    <div class="side-head">
+      <h3>Summary</h3>
+      <span class="invite-summary" aria-live="polite">
+        <mat-icon>mail</mat-icon> {{ counts.to.length }} To · {{ counts.cc.length }} CC
+      </span>
+    </div>
+    @if (ccInTo) {
+      <p class="cc-note">
+        <mat-icon>info</mat-icon>
+        <span>{{ ccInTo }} CC address{{ ccInTo === 1 ? ' is' : 'es are' }} already in To, so
+          {{ ccInTo === 1 ? 'it gets' : 'they get' }} one copy as To.</span>
+      </p>
+    }
+    <p class="side-label">What recipients will receive</p>
+
+    <div class="mail-frame">
+      <div class="mail-scroll" tabindex="0" aria-label="Email preview">
+        <div class="mail-meta">
+          <p class="mail-subject">{{ subject.trim() || '(no subject)' }}</p>
+          <p class="mail-to">
+            {{ counts.to.length }} To{{ counts.cc.length ? ' · ' + counts.cc.length + ' CC' : '' }} ·
+            addresses visible to all · one copy each
+          </p>
+        </div>
+
+        <div class="mail-body">
+          <!-- Filled by syncPreview() with an allowlisted copy of the editor content. -->
+          <div #previewBody class="mail-message" [hidden]="!hasMessage()"></div>
+          @if (!hasMessage()) {
+            <p class="mail-empty">Your message appears here.</p>
+          }
+
+          <div class="mail-card">
+            <div class="mail-card-head">You're invited!</div>
+            <div class="mail-card-body">
+              <p>You have been invited to:</p>
+              <p class="mail-event">{{ event.title }}</p>
+              <p>
+                <strong>When:</strong>
+                @if (sameDay) {
+                  {{ event.startsAt | date: 'EEEE, MMMM d y' }} · {{ event.startsAt | date: 'h:mm a' }}–{{ event.endsAt | date: 'h:mm a' }}
+                } @else {
+                  {{ event.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ event.endsAt | date: 'EEE, MMM d y, h:mm a' }}
+                }
+              </p>
+              <p><strong>Where:</strong> {{ whereText }}</p>
+              @if (event.description) {
+                <p class="mail-desc">{{ event.description }}</p>
+              }
+              <span class="mail-cta">Register now</span>
+              <p class="mail-link">Or paste this link: {{ registerUrl }}</p>
+            </div>
+            <div class="mail-card-foot">Event Registration · this is an automated message</div>
+          </div>
+
+          <div class="mail-attach">
+            <mat-icon>event</mat-icon>
+            <span><strong>invite.ics</strong> · calendar invitation in Philippine time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button mat-flat-button color="primary" class="full-width" (click)="send()" [disabled]="sending() || processingImage()">
+      <mat-icon>send</mat-icon> Send invitations
+    </button>
+  </aside>
+</div>

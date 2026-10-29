@@ -1,11 +1,15 @@
+import time
+
+import cv2
 import numpy as np
 
-from app.api.dependencies import ServiceContainer, wire_services
+from app.api.dependencies import ServiceContainer, _tracking_config, wire_services
 from app.core.config import Settings
 from app.ml.detector import DetectedFace
 from app.ml.face_analyzer import FaceAnalyzer
 from app.services.track_state import DetectionMode, TrackState, TrackStatus
-from tests.conftest import FakeGallerySource, make_face_image
+from app.services.tracking_service import TrackingService
+from tests.conftest import FakeDetector, FakeEmbedder, FakeGallerySource, make_face_image
 
 
 def test_matched_track_keeps_name_when_recheck_is_weaker(
@@ -111,3 +115,65 @@ def test_continuous_mode_identifies_on_the_first_frame(settings, face_analyzer, 
 
     assert tracking.get_snapshot().tracks[0].status == TrackStatus.MATCHED
     assert tracking.get_snapshot().detection_mode == DetectionMode.CONTINUOUS
+
+
+class _CountingSource:
+    """A camera that always has a new frame: every read returns the next frame number."""
+
+    is_open = True
+
+    def __init__(self, _source: str) -> None:
+        self._frame_number = 0
+        self._frame = make_face_image("red", size=400)
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def read_latest(self) -> tuple[int, np.ndarray]:
+        self._frame_number += 1
+        return self._frame_number, self._frame
+
+
+class _SlowDetector(FakeDetector):
+    def detect(self, image: np.ndarray) -> list[DetectedFace]:
+        time.sleep(0.5)
+        return super().detect(image)
+
+
+def test_video_keeps_playing_while_inference_is_slow(
+    settings: Settings, gallery_source: FakeGallerySource
+) -> None:
+    analyzer = FaceAnalyzer(_SlowDetector(), FakeEmbedder(), min_face_size_pixels=10)
+    container = wire_services(settings, analyzer, analyzer, gallery_source)
+    tracking = TrackingService(
+        analyzer,
+        container.recognition_service,
+        source_factory=_CountingSource,
+        video_source="0",
+        config=_tracking_config(settings),
+    )
+    tracking.start()
+    try:
+        frames, previous = 0, None
+        deadline = time.monotonic() + 0.3
+        while time.monotonic() < deadline:
+            jpeg = tracking.wait_for_new_jpeg(previous, timeout_seconds=0.3)
+            if jpeg is not None:
+                frames, previous = frames + 1, jpeg
+        # The first detection is still running, yet the video has moved on many times.
+        assert tracking.get_snapshot().frame_index <= 1
+        assert frames >= 5
+        assert previous is not None and previous.startswith(b"\xff\xd8")
+    finally:
+        tracking.stop()
+
+
+def test_video_is_mirrored_for_display_only(container: ServiceContainer) -> None:
+    tracking = container.tracking_service
+    frame = np.zeros((200, 400, 3), dtype=np.uint8)
+    frame[:, :100] = (0, 0, 255)  # red on the camera's left
+    tracking._publish_preview(frame)
+    shown = cv2.imdecode(np.frombuffer(tracking.get_latest_jpeg(), np.uint8), cv2.IMREAD_COLOR)
+    assert shown[100, 350, 2] > 200 and shown[100, 50, 2] < 50  # shown on the right
+    assert frame[100, 50, 2] == 255  # the camera frame itself is untouched

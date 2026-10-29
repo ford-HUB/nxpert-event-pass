@@ -41,6 +41,7 @@ export class HomeComponent {
       return [
         { title: 'Dashboard', subtitle: 'Insights & KPI', icon: 'insights', link: '/admin/dashboard', category: 'Operations' },
         { title: 'Events', subtitle: 'Manage & Schedule', icon: 'event', link: '/admin/events', category: 'Events' },
+        { title: 'Calendar', subtitle: 'Event Dates & Invitations', icon: 'calendar_month', link: '/calendar', category: 'Events' },
         { title: 'Browse Events', subtitle: 'Open Registrations', icon: 'travel_explore', link: '/events', category: 'Events' },
         { title: 'My Events', subtitle: 'Passes & Tickets', icon: 'confirmation_number', link: '/my-events', category: 'Events' },
         { title: 'Meal Scanner', subtitle: 'Meal Stub Redemption', icon: 'restaurant', link: '/merchant/scan', category: 'Operations' },
@@ -57,6 +58,7 @@ export class HomeComponent {
     const participant: AppModule[] = [
       { title: 'Browse Events', subtitle: 'Open Registrations', icon: 'travel_explore', link: '/events', category: 'Events' },
       { title: 'My Events', subtitle: 'Passes & Tickets', icon: 'confirmation_number', link: '/my-events', category: 'Events' },
+      { title: 'Calendar', subtitle: 'Event Dates & Invitations', icon: 'calendar_month', link: '/calendar', category: 'Events' },
       account,
     ];
     if (this.auth.canConfirm()) {

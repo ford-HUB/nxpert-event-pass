@@ -1,147 +1,151 @@
-@if (sending() || confirming() || cancelling()) {
+@if (sending() || confirming() || cancelling() || deleting()) {
   <div class="loading-overlay">
     <mat-spinner diameter="52"></mat-spinner>
-    <p>{{ confirming() ? 'Confirming registrations…' : cancelling() ? 'Cancelling registrations…' : 'Sending invitations…' }}</p>
+    <p>{{ confirming() ? 'Confirming registrations…' : cancelling() ? 'Cancelling registrations…' : deleting() ? 'Deleting attendees…' : 'Sending invitations…' }}</p>
   </div>
 }
 
 @if (loading()) {
   <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
 } @else if (event(); as e) {
-  <div class="toolbar-row">
-    <a mat-icon-button routerLink="/admin/events"><mat-icon>arrow_back</mat-icon></a>
-    <div class="page-title">
-      <mat-icon color="primary">event</mat-icon>
-      <h1>{{ e.title }}</h1>
-    </div>
-    <span class="spacer"></span>
-    @if (auth.canConfirm()) {
-      <button mat-stroked-button (click)="sendViberBroadcast()"
-              matTooltip="Type an announcement and send it over Viber to all registered Viber numbers">
-        <mat-icon>campaign</mat-icon> Viber blast
-      </button>
-    }
-    @if (auth.isAdmin()) {
-      <a mat-stroked-button [routerLink]="['/admin/events', e.id, 'edit']">
-        <mat-icon>edit</mat-icon> Edit
+  <div class="ed-page">
+  <!-- Header: title, actions, key figures and public link -->
+  <section class="ed-hero">
+    <div class="ed-hero-top">
+      <a mat-icon-button class="ed-back" routerLink="/admin/events" aria-label="Back to events">
+        <mat-icon>arrow_back</mat-icon>
       </a>
-      <button mat-stroked-button (click)="toggleClosed()">
-        <mat-icon>{{ e.status === 'Closed' ? 'lock_open' : 'lock' }}</mat-icon>
-        {{ e.status === 'Closed' ? 'Reopen' : 'Close' }}
-      </button>
-      <button mat-stroked-button (click)="downloadOfflineBundle()" [disabled]="downloadingBundle()"
-              matTooltip="Download this event's data for offline check-in on a device that can't connect at the venue">
-        <mat-icon>{{ downloadingBundle() ? 'hourglass_top' : 'cloud_download' }}</mat-icon>
-        Offline bundle
-      </button>
-      <button mat-stroked-button color="warn" (click)="deleteEvent()">
-        <mat-icon>delete</mat-icon> Delete
-      </button>
-    }
-  </div>
+      <span class="ed-icon"><mat-icon>event</mat-icon></span>
+      <div class="ed-heading">
+        <div class="ed-badges">
+          @if (e.status === 'Closed') {
+            <span class="status-pill closed"><mat-icon class="inline-icon">lock</mat-icon> Registration closed</span>
+          } @else if (e.isFull) {
+            <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
+          } @else {
+            <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Registration open</span>
+          }
+          <span class="status-pill brand">
+            <mat-icon class="inline-icon">{{ e.format === 'Online' ? 'videocam' : e.format === 'Hybrid' ? 'devices' : 'place' }}</mat-icon>
+            {{ e.format === 'InPerson' ? 'In person' : e.format }}
+          </span>
+        </div>
+        <h1 class="ed-title">{{ e.title }}</h1>
+        <div class="ed-meta">
+          <span class="ed-meta-item">
+            <mat-icon>schedule</mat-icon>
+            {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'h:mm a' }}
+          </span>
+          @if (e.format !== 'Online') {
+            <span class="ed-meta-item"><mat-icon>place</mat-icon> {{ e.venue }}</span>
+          }
+          @if (e.format === 'Online' || e.format === 'Hybrid') {
+            <span class="ed-meta-item">
+              <mat-icon>videocam</mat-icon>
+              @if (e.meetingUrl) {
+                <a [href]="e.meetingUrl" target="_blank" rel="noopener">Online meeting link</a>
+                <span class="muted">· sent with each confirmation, plus a calendar invite</span>
+              } @else {
+                <span class="muted">Online — no meeting link yet. Add it in Edit so confirmations include it.</span>
+              }
+            </span>
+          }
+        </div>
+      </div>
 
-  <div class="detail-summary">
-    <div class="badge-row">
-      @if (e.status === 'Closed') {
-        <span class="status-pill closed"><mat-icon class="inline-icon">lock</mat-icon> Registration closed</span>
-      } @else if (e.isFull) {
-        <span class="status-pill closed"><mat-icon class="inline-icon">groups</mat-icon> Full</span>
-      } @else {
-        <span class="status-pill ok"><mat-icon class="inline-icon">how_to_reg</mat-icon> Registration open</span>
+      <div class="ed-actions">
+        @if (auth.canConfirm()) {
+          <button mat-stroked-button (click)="sendViberBroadcast()"
+                  matTooltip="Type an announcement and send it over Viber to all registered Viber numbers">
+            <mat-icon>campaign</mat-icon> Viber blast
+          </button>
+        }
+        @if (auth.isAdmin()) {
+          <a mat-stroked-button [routerLink]="['/admin/events', e.id, 'edit']">
+            <mat-icon>edit</mat-icon> Edit
+          </a>
+          <button mat-stroked-button (click)="toggleClosed()">
+            <mat-icon>{{ e.status === 'Closed' ? 'lock_open' : 'lock' }}</mat-icon>
+            {{ e.status === 'Closed' ? 'Reopen' : 'Close' }}
+          </button>
+          <button mat-stroked-button (click)="downloadOfflineBundle()" [disabled]="downloadingBundle()"
+                  matTooltip="Download this event's data for offline check-in on a device that can't connect at the venue">
+            <mat-icon>{{ downloadingBundle() ? 'hourglass_top' : 'cloud_download' }}</mat-icon>
+            Offline bundle
+          </button>
+          <button mat-stroked-button color="warn" class="ed-delete" (click)="deleteEvent()">
+            <mat-icon>delete</mat-icon> Delete
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="ed-stats">
+      <div class="ed-stat">
+        <span class="ed-stat-icon"><mat-icon>groups</mat-icon></span>
+        <div class="ed-stat-body">
+          <span class="ed-stat-label">Registered</span>
+          <span class="ed-stat-num">
+            {{ e.registeredCount }}@if (e.capacity) { <small>/ {{ e.capacity }}</small> }
+          </span>
+          @if (e.capacity) {
+            <span class="ed-meter" role="img" [attr.aria-label]="capacityPct() + '% of capacity'">
+              <span [style.width.%]="capacityPct()"></span>
+            </span>
+          } @else {
+            <span class="ed-stat-sub">No capacity limit</span>
+          }
+        </div>
+      </div>
+      <div class="ed-stat">
+        <span class="ed-stat-icon"><mat-icon>fact_check</mat-icon></span>
+        <div class="ed-stat-body">
+          <span class="ed-stat-label">Checked in</span>
+          <span class="ed-stat-num">{{ e.checkedInCount }}</span>
+          <span class="ed-stat-sub">{{ checkInPct() }}% of registered</span>
+        </div>
+      </div>
+      <div class="ed-stat" [class.is-warn]="totalPendingCount() > 0">
+        <span class="ed-stat-icon"><mat-icon>hourglass_empty</mat-icon></span>
+        <div class="ed-stat-body">
+          <span class="ed-stat-label">Pending</span>
+          <span class="ed-stat-num">{{ totalPendingCount() }}</span>
+          <span class="ed-stat-sub">awaiting confirmation</span>
+        </div>
+      </div>
+      @if (auth.isAdmin()) {
+        <div class="ed-stat">
+          <span class="ed-stat-icon"><mat-icon>redeem</mat-icon></span>
+          <div class="ed-stat-body">
+            <span class="ed-stat-label">Kits claimed</span>
+            <span class="ed-stat-num">{{ kitClaimedCount() }} <small>/ {{ attendees().length }}</small></span>
+            <span class="ed-stat-sub">of registrations</span>
+          </div>
+        </div>
       }
     </div>
-    <p class="detail-row"><mat-icon class="inline-icon">schedule</mat-icon>
-      {{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }} – {{ e.endsAt | date: 'h:mm a' }}</p>
-    @if (e.format !== 'Online') {
-      <p class="detail-row"><mat-icon class="inline-icon">place</mat-icon> {{ e.venue }}</p>
-    }
-    @if (e.format === 'Online' || e.format === 'Hybrid') {
-      <p class="detail-row">
-        <mat-icon class="inline-icon">videocam</mat-icon>
-        @if (e.meetingUrl) {
-          <a [href]="e.meetingUrl" target="_blank" rel="noopener">Online meeting link</a>
-          <span class="muted">· sent with each confirmation, plus a calendar invite</span>
-        } @else {
-          <span class="muted">Online — no meeting link yet. Add it in Edit so confirmations include it.</span>
-        }
-      </p>
-    }
-    <div class="stat-row">
-      <div class="stat">
-        <span class="stat-num">{{ e.registeredCount }}{{ e.capacity ? '/' + e.capacity : '' }}</span>
-        <span class="muted">{{ e.capacity ? 'registered (capacity)' : 'registered' }}</span>
-      </div>
-      <div class="stat"><span class="stat-num">{{ e.checkedInCount }}</span><span class="muted">checked in</span></div>
-    </div>
-    @if (e.isPublicLinkEnabled) {
-      <div class="link-box">
-        <mat-icon class="inline-icon">link</mat-icon>
-        <span class="link-text">{{ publicUrl() }}</span>
-        <button mat-icon-button (click)="copyLink()" matTooltip="Copy"><mat-icon>content_copy</mat-icon></button>
-      </div>
-    }
-  </div>
 
-  <mat-tab-group>
+    @if (e.isPublicLinkEnabled) {
+      <div class="ed-link">
+        <span class="ed-link-label"><mat-icon>link</mat-icon> Public link</span>
+        <span class="ed-link-text" [title]="publicUrl()">{{ publicUrl() }}</span>
+        <a mat-icon-button [href]="publicUrl()" target="_blank" rel="noopener" matTooltip="Open in new tab"
+           aria-label="Open public link"><mat-icon>open_in_new</mat-icon></a>
+        <button mat-icon-button (click)="copyLink()" matTooltip="Copy" aria-label="Copy public link">
+          <mat-icon>content_copy</mat-icon>
+        </button>
+      </div>
+    }
+  </section>
+
+  <section class="ed-panel">
+  <mat-tab-group class="ed-tabs" mat-stretch-tabs="false" mat-align-tabs="start" animationDuration="150ms">
     <!-- Invites (admin only) -->
     @if (auth.isAdmin()) {
     <mat-tab label="Invite">
       <div class="tab-body">
-        <div class="contact-head">
-          <h3>Pick contacts</h3>
-          <span class="spacer"></span>
-          @if (selectedCount() > 0) {
-            <span class="status-pill ok">{{ selectedCount() }} selected</span>
-          }
-        </div>
-
-        @if (contacts().length === 0) {
-          <p class="muted">No seeded contacts.</p>
-        } @else {
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Search contacts</mat-label>
-            <mat-icon matPrefix>search</mat-icon>
-            <input matInput [ngModel]="contactSearch()" (ngModelChange)="onSearch($event)"
-                   placeholder="Name, email, or chapter" />
-            @if (contactSearch()) {
-              <button matIconSuffix mat-icon-button aria-label="Clear" (click)="onSearch('')">
-                <mat-icon>close</mat-icon>
-              </button>
-            }
-          </mat-form-field>
-
-          @if (filteredContacts().length === 0) {
-            <p class="muted">No contacts match “{{ contactSearch() }}”.</p>
-          } @else {
-            <div class="contact-list">
-              @for (c of pagedContacts(); track c.id) {
-                <mat-checkbox [checked]="isSelected(c.id)" (change)="toggle(c.id)">
-                  {{ c.fullName }}
-                  <span class="muted">· {{ c.email }}@if (c.organization) { · {{ c.organization }} }</span>
-                </mat-checkbox>
-              }
-            </div>
-
-            <mat-paginator
-              [length]="filteredContacts().length"
-              [pageSize]="pageSize()"
-              [pageIndex]="pageIndex()"
-              [pageSizeOptions]="[5, 10, 25, 50]"
-              (page)="onPage($event)"
-              aria-label="Select page of contacts">
-            </mat-paginator>
-          }
-        }
-
-        <mat-form-field appearance="outline" class="full-width extra-emails">
-          <mat-label>Additional emails (comma or space separated)</mat-label>
-          <textarea matInput [(ngModel)]="extraEmails" rows="2"
-            placeholder="guest1@example.com, guest2@example.com"></textarea>
-        </mat-form-field>
-
-        <button mat-flat-button color="primary" (click)="sendInvites()" [disabled]="sending()">
-          <mat-icon>send</mat-icon> Send invitations
-        </button>
+        <app-invitation-composer [event]="e" [contacts]="contacts()"
+                                 (sendingChange)="sending.set($event)" (sent)="reload()" />
       </div>
     </mat-tab>
     }
@@ -149,7 +153,7 @@
     <!-- Attendance -->
     <mat-tab label="Attendance ({{ attendees().length }})">
       <div class="tab-body">
-        <div class="toolbar-row">
+        <div class="filter-bar">
           <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
             <mat-label>Search attendees</mat-label>
             <mat-icon matPrefix>search</mat-icon>
@@ -192,45 +196,66 @@
               </mat-select>
             </mat-form-field>
           }
-          @if (pendingCount() > 0) {
-            <span class="status-pill pending">
-              <mat-icon class="inline-icon">hourglass_empty</mat-icon>
-              {{ pendingCount() }} pending confirmation
-            </span>
-          }
+        </div>
+        <div class="action-bar attendance-actions">
+          <div class="selection-info">
+            @if (selectedAttendeeRows().length > 0) {
+              <span class="status-pill brand">
+                <mat-icon class="inline-icon">check_box</mat-icon>
+                {{ selectedAttendeeRows().length }} selected
+              </span>
+              <button mat-button class="clear-selection" (click)="clearAttendeeSelection()">Clear</button>
+            } @else if (pendingCount() > 0) {
+              <span class="status-pill pending">
+                <mat-icon class="inline-icon">hourglass_empty</mat-icon>
+                {{ pendingCount() }} awaiting confirmation
+              </span>
+            } @else {
+              <span class="muted hint">Tick a row to confirm, check in, print or delete.</span>
+            }
+          </div>
           <span class="spacer"></span>
-          <button
-            mat-flat-button
-            color="primary"
-            (click)="confirmSelected()"
-            [disabled]="confirming() || selectedPendingCount() === 0"
-          >
-            <mat-icon>how_to_reg</mat-icon>
-            Confirm selected@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
-          </button>
-          <button
-            mat-flat-button
-            color="accent"
-            (click)="checkInSelected()"
-            [disabled]="checkingIn() || selectedCheckInCount() === 0"
-          >
-            <mat-icon>fact_check</mat-icon>
-            Check in selected@if (selectedCheckInCount() > 0) { ({{ selectedCheckInCount() }}) }
-          </button>
-          <!-- Cancel applies to pending rows only; confirmed / checked-in rows in the selection are skipped. -->
-          <button
-            mat-stroked-button
-            color="warn"
-            (click)="cancelSelected()"
-            [disabled]="cancelling() || selectedPendingCount() === 0"
-            matTooltip="Only pending registrations can be cancelled"
-          >
-            <mat-icon>event_busy</mat-icon>
-            Cancel selected@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
-          </button>
-          <button mat-stroked-button (click)="exportCsv()" [disabled]="attendees().length === 0">
-            <mat-icon>download</mat-icon> Export CSV
-          </button>
+
+          <div class="action-group">
+            <button mat-flat-button color="primary" (click)="confirmSelected()"
+                    [disabled]="confirming() || selectedPendingCount() === 0"
+                    matTooltip="Confirm the selected pending registrations and send their passes">
+              <mat-icon>how_to_reg</mat-icon>
+              Confirm@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
+            </button>
+            <button mat-flat-button color="accent" (click)="checkInSelected()"
+                    [disabled]="checkingIn() || selectedCheckInCount() === 0"
+                    matTooltip="Mark the selected attendees as checked in">
+              <mat-icon>fact_check</mat-icon>
+              Check in@if (selectedCheckInCount() > 0) { ({{ selectedCheckInCount() }}) }
+            </button>
+            <button mat-stroked-button (click)="printSelectedPass()"
+                    [disabled]="selectedAttendeeRows().length !== 1"
+                    [matTooltip]="selectedAttendeeRows().length === 1 ? 'Print the QR pass of the selected attendee' : 'Select exactly one attendee to print a QR pass'">
+              <mat-icon>print</mat-icon> Print QR
+            </button>
+          </div>
+
+          <div class="action-group">
+            <!-- Cancel applies to pending rows only; confirmed / checked-in rows in the selection are skipped. -->
+            <button mat-stroked-button color="warn" (click)="cancelSelected()"
+                    [disabled]="cancelling() || selectedPendingCount() === 0"
+                    matTooltip="Only pending registrations can be cancelled">
+              <mat-icon>event_busy</mat-icon>
+              Cancel@if (selectedPendingCount() > 0) { ({{ selectedPendingCount() }}) }
+            </button>
+            @if (auth.isAdmin()) {
+              <button mat-stroked-button color="warn" (click)="deleteSelected()"
+                      [disabled]="deleting() || selectedAttendeeRows().length === 0"
+                      matTooltip="Remove the selected attendees (registration history is kept)">
+                <mat-icon>delete</mat-icon>
+                Delete@if (selectedAttendeeRows().length > 0) { ({{ selectedAttendeeRows().length }}) }
+              </button>
+            }
+            <button mat-stroked-button (click)="exportCsv()" [disabled]="attendees().length === 0">
+              <mat-icon>download</mat-icon> Export CSV
+            </button>
+          </div>
         </div>
 
         @if (attendees().length === 0) {
@@ -253,39 +278,40 @@
               <ng-container matColumnDef="select">
                 <th mat-header-cell *matHeaderCellDef>
                   <mat-checkbox
-                    [checked]="allSelectableSelected()"
-                    [disabled]="selectableAttendees().length === 0"
+                    [checked]="allAttendeesSelected()"
+                    [indeterminate]="selectedAttendeeRows().length > 0 && !allAttendeesSelected()"
+                    [disabled]="displayedAttendees().length === 0"
                     (change)="toggleAllSelectable()"
-                    matTooltip="Select all not-yet-checked-in">
+                    aria-label="Select all attendees"
+                    matTooltip="Select all">
                   </mat-checkbox>
                 </th>
                 <td mat-cell *matCellDef="let a">
-                  @if (!a.checkedInAt) {
-                    <mat-checkbox
-                      [checked]="isAttendeeSelected(a.registrationId)"
-                      (change)="toggleAttendee(a.registrationId)">
-                    </mat-checkbox>
-                  }
+                  <mat-checkbox
+                    [checked]="isAttendeeSelected(a.registrationId)"
+                    (change)="toggleAttendee(a.registrationId)"
+                    [attr.aria-label]="'Select ' + a.fullName">
+                  </mat-checkbox>
                 </td>
               </ng-container>
               <ng-container matColumnDef="name">
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
-                <td mat-cell *matCellDef="let a">{{ a.fullName }}</td>
+                <td mat-cell *matCellDef="let a"><span class="cell-name">{{ a.fullName }}</span></td>
               </ng-container>
               <ng-container matColumnDef="senate">
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>ID No.</th>
                 <td mat-cell *matCellDef="let a">{{ a.senateNo || '—' }}</td>
               </ng-container>
               <ng-container matColumnDef="phone">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Mobile No.</th>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Mobile</th>
                 <td mat-cell *matCellDef="let a">{{ a.phone || '—' }}</td>
               </ng-container>
               <ng-container matColumnDef="email">
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>Email</th>
-                <td mat-cell *matCellDef="let a">{{ a.email }}</td>
+                <td mat-cell *matCellDef="let a">{{ a.email || '—' }}</td>
               </ng-container>
               <ng-container matColumnDef="passVia">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Pass via</th>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Delivery</th>
                 <td mat-cell *matCellDef="let a">
                   <div class="delivery-badges">
                     @if (a.notificationChannel === 'Email' || a.notificationChannel === 'Both') {
@@ -299,12 +325,9 @@
                 </td>
               </ng-container>
               <ng-container matColumnDef="session">
-                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-events</th>
+                <th mat-header-cell *matHeaderCellDef mat-sort-header>Sub-event</th>
                 <td mat-cell *matCellDef="let a">
-                  <span class="session-badge">{{ a.sessionTitle || '(whole event)' }}</span>
-                  <span class="session-checkin" matTooltip="Check-in status for this registration">
-                    {{ a.checkedInAt ? '1/1' : '0/1' }} in
-                  </span>
+                  <span class="session-badge">{{ a.sessionTitle || 'Whole event' }}</span>
                 </td>
               </ng-container>
               <ng-container matColumnDef="registered">
@@ -351,33 +374,9 @@
                 </ng-container>
               }
 
-              <ng-container matColumnDef="pass">
-                <th mat-header-cell *matHeaderCellDef>Pass</th>
-                <td mat-cell *matCellDef="let a">
-                  <button mat-icon-button type="button"
-                          (click)="showAttendeePass(a)"
-                          [attr.aria-label]="'Show QR pass for ' + a.fullName"
-                          matTooltip="Show QR pass">
-                    <mat-icon>qr_code_2</mat-icon>
-                  </button>
-                </td>
-              </ng-container>
-
-              <ng-container matColumnDef="delete">
-                <th mat-header-cell *matHeaderCellDef>Delete</th>
-                <td mat-cell *matCellDef="let a">
-                  <button mat-icon-button type="button" class="attendee-delete"
-                          (click)="deleteAttendee(a)"
-                          [disabled]="deletingAttendees().has(a.registrationId)"
-                          [attr.aria-label]="'Delete attendee ' + a.fullName"
-                          matTooltip="Delete attendee (keep history)">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </td>
-              </ng-container>
-
               <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
-              <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns()"
+                  [class.row-selected]="isAttendeeSelected(row.registrationId)"></tr>
             </table>
           </div>
         }
@@ -388,7 +387,7 @@
     @if (auth.isAdmin()) {
     <mat-tab label="Kit Claiming ({{ kitClaimedCount() }}/{{ attendees().length }})">
       <div class="tab-body">
-        <div class="toolbar-row">
+        <div class="filter-bar">
           <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
             <mat-label>Search</mat-label>
             <mat-icon matPrefix>search</mat-icon>
@@ -419,6 +418,12 @@
               </mat-select>
             </mat-form-field>
           }
+        </div>
+        <div class="action-bar">
+          <span class="status-pill brand">
+            <mat-icon class="inline-icon">redeem</mat-icon>
+            {{ kitClaimedCount() }} of {{ attendees().length }} claimed
+          </span>
           <span class="spacer"></span>
           <button
             mat-flat-button
@@ -532,7 +537,7 @@
     @if (auth.isAdmin() && eventHasMealDefs()) {
     <mat-tab label="Meal Stubs ({{ stubTotals().redeemed }}/{{ stubTotals().total }})">
       <div class="tab-body">
-        <div class="toolbar-row">
+        <div class="filter-bar">
           <mat-form-field appearance="outline" class="attendee-search" subscriptSizing="dynamic">
             <mat-label>Search</mat-label>
             <mat-icon matPrefix>search</mat-icon>
@@ -563,6 +568,8 @@
               </mat-select>
             </mat-form-field>
           }
+        </div>
+        <div class="action-bar">
           <span class="status-pill neutral">
             ₱{{ filteredRedeemed().value | number: '1.2-2' }} redeemed
             @if (redeemedAtFilter() !== 'all') { at {{ redeemedAtFilter() }} }
@@ -700,4 +707,6 @@
     </mat-tab>
     }
   </mat-tab-group>
+  </section>
+  </div>
 }

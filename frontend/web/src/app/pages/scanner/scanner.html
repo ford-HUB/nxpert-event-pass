@@ -1,32 +1,37 @@
-<div class="page-title">
+<div class="page-title scan-title">
   <mat-icon color="primary">qr_code_scanner</mat-icon>
   <h1>Check-in{{ eventTitle() ? ' — ' + eventTitle() : '' }}</h1>
-  <span class="spacer"></span>
-  <a mat-stroked-button [routerLink]="['/admin/events', eventId]">
-    <mat-icon>arrow_back</mat-icon> Back
-  </a>
-  <button mat-stroked-button (click)="beeper.toggleMute()"
-          [attr.aria-pressed]="!beeper.muted()"
-          [attr.aria-label]="beeper.muted() ? 'Turn scan beep on' : 'Turn scan beep off'">
-    <mat-icon>{{ beeper.muted() ? 'volume_off' : 'volume_up' }}</mat-icon>
-    {{ beeper.muted() ? 'Sound off' : 'Sound on' }}
-  </button>
-  <a mat-stroked-button [routerLink]="['/scanner', eventId, 'tv']"
-     title="Full-screen door TV: the face recognition engine's camera checks people in">
-    <mat-icon>connected_tv</mat-icon> TV mode
-  </a>
+  <!-- Actions wrap under the title when space is short; labels collapse to icons on phones. -->
+  <div class="title-actions">
+    <a mat-stroked-button [routerLink]="['/admin/events', eventId]" aria-label="Back to event">
+      <mat-icon>arrow_back</mat-icon> <span class="btn-label">Back</span>
+    </a>
+    <button mat-stroked-button (click)="beeper.toggleMute()"
+            [attr.aria-pressed]="!beeper.muted()"
+            [attr.aria-label]="beeper.muted() ? 'Turn scan beep on' : 'Turn scan beep off'">
+      <mat-icon>{{ beeper.muted() ? 'volume_off' : 'volume_up' }}</mat-icon>
+      <span class="btn-label">{{ beeper.muted() ? 'Sound off' : 'Sound on' }}</span>
+    </button>
+    @if (eventBanner()) {
+      <button mat-stroked-button (click)="openScreenDisplay()" aria-label="Screen display"
+              title="Show the event banner full screen">
+        <mat-icon>fit_screen</mat-icon> <span class="btn-label">Screen Display</span>
+      </button>
+    }
+    <a mat-stroked-button [routerLink]="['/scanner', eventId, 'tv']" aria-label="TV mode"
+       title="Full-screen door TV: the face recognition engine's camera checks people in">
+      <mat-icon>connected_tv</mat-icon> <span class="btn-label">TV mode</span>
+    </a>
+  </div>
 </div>
 
-<!-- Event banner strip: contained on the brand backdrop so wide, square or tall images all fit
-     without cropping or distortion. -->
-@if (eventBanner()) {
-  <div class="scan-banner">
-    <img [src]="eventBanner()" [alt]="eventTitle() + ' banner'" />
-  </div>
-}
-
 <div class="scanner-layout" [class.cam-lg]="camSize() === 'lg' && mode() !== 'barcode'">
-  <div class="scanner-col">
+  <!-- Settings card (left) and camera card (right); phones stack them. Scan results pop up over
+       the page (below). -->
+  <section class="scan-panel scanner-col" aria-label="Scanner settings">
+    <div class="panel-head">
+      <span class="panel-title"><mat-icon class="panel-icon">tune</mat-icon> Scanner settings</span>
+    </div>
     <mat-button-toggle-group class="mode-toggle" [value]="scanAction()"
         (change)="setAction($event.value)" aria-label="Scan action">
       <mat-button-toggle value="checkin"><mat-icon>how_to_reg</mat-icon> Check-in</mat-button-toggle>
@@ -69,10 +74,10 @@
       }
     }
 
-    <mat-button-toggle-group class="mode-toggle" [value]="mode()"
+    <mat-button-toggle-group class="mode-toggle source-toggle" [value]="mode()"
         (change)="setMode($event.value)" aria-label="Scan input source">
       @if (scanAction() === 'checkin') {
-        <mat-button-toggle value="auto"><mat-icon>auto_awesome</mat-icon> Auto (QR + Face)</mat-button-toggle>
+        <mat-button-toggle value="auto"><mat-icon>auto_awesome</mat-icon> Auto<span class="lbl-extra"> (QR + Face)</span></mat-button-toggle>
       }
       <mat-button-toggle value="camera"><mat-icon>photo_camera</mat-icon> QR camera</mat-button-toggle>
       <mat-button-toggle value="barcode"><mat-icon>qr_code_scanner</mat-icon> Barcode</mat-button-toggle>
@@ -80,6 +85,16 @@
         <mat-button-toggle value="face"><mat-icon>face</mat-icon> Face</mat-button-toggle>
       }
     </mat-button-toggle-group>
+    @if (mode() === 'auto') {
+      <p class="muted meal-mode-note auto-note">
+        <mat-icon class="inline-icon">auto_awesome</mat-icon>
+        Auto mode: show a QR pass or a registered face — a QR code always takes priority.
+      </p>
+    }
+
+    <!-- Takes up the extra height when the card is stretched to match the camera card, so the
+         status bar lines up with the camera's Stop row. -->
+    <div class="settings-fill" aria-hidden="true"></div>
 
     <!-- Offline / sync status -->
     <div class="offline-bar" [class.is-offline]="!offline.online()">
@@ -107,27 +122,26 @@
         }
       }
     </div>
+  </section>
 
-    <!-- Camera preview size (not used by the barcode input) -->
-    @if (mode() !== 'barcode') {
-      <div class="size-row">
-        <span class="size-label"><mat-icon class="inline-icon">aspect_ratio</mat-icon> Preview size</span>
+  <section class="scan-panel scan-stage" aria-label="Scanner">
+    <div class="panel-head">
+      <span class="panel-title">
+        <mat-icon class="panel-icon">{{ mode() === 'barcode' ? 'qr_code_scanner' : mode() === 'face' ? 'face' : 'photo_camera' }}</mat-icon>
+        {{ mode() === 'barcode' ? 'Barcode scanner' : mode() === 'face' ? 'Face recognition' : 'Live camera' }}
+      </span>
+      <!-- Camera preview size (not used by the barcode input) -->
+      @if (mode() !== 'barcode') {
         <mat-button-toggle-group class="size-toggle" [value]="camSize()" (change)="setCamSize($event.value)"
                                  aria-label="Camera preview size">
           @for (s of camSizes; track s.value) {
             <mat-button-toggle [value]="s.value">{{ s.label }}</mat-button-toggle>
           }
         </mat-button-toggle-group>
-      </div>
-    }
+      }
+    </div>
 
     @if (mode() === 'camera' || mode() === 'auto') {
-      @if (mode() === 'auto') {
-        <p class="muted meal-mode-note">
-          <mat-icon class="inline-icon">auto_awesome</mat-icon>
-          Auto mode: show a QR pass or a registered face — a QR code always takes priority.
-        </p>
-      }
       <div class="cam-block" [class.mirrored]="qrMirrored()"
            [class.size-sm]="camSize() === 'sm'" [class.size-lg]="camSize() === 'lg'">
         <div id="qr-reader" class="qr-reader"></div>
@@ -217,131 +231,132 @@
         <ng-container *ngTemplateOutlet="attendanceCounter" />
       </div>
     }
-  </div>
-
-  <!-- Big result banner -->
-  <div class="result-banner" [class]="'banner-' + banner()">
-    @switch (banner()) {
-      @case ('valid') {
-        @if (resultPhoto()) {
-          <img class="banner-photo" [src]="resultPhoto()" alt="Member photo" />
-        } @else {
-          <mat-icon class="banner-icon">check_circle</mat-icon>
-        }
-        <h2>{{ resultWelcome() || eventWelcome() || 'Welcome!' }}</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        @if (resultLevel() || resultSenateNo() || resultOrganization()) {
-          <p class="banner-meta">
-            @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
-            @if (resultSenateNo()) { <span class="meta-chip">ID No. {{ resultSenateNo() }}</span> }
-            @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
-          </p>
-        }
-        <p class="banner-sub">{{ resultEvent() }}</p>
-        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
-      }
-      @case ('verified') {
-        @if (resultPhoto()) {
-          <img class="banner-photo" [src]="resultPhoto()" alt="Member photo" />
-        } @else {
-          <mat-icon class="banner-icon">verified_user</mat-icon>
-        }
-        <h2>Verified</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        @if (resultLevel() || resultSenateNo() || resultOrganization()) {
-          <p class="banner-meta">
-            @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
-            @if (resultSenateNo()) { <span class="meta-chip">ID No. {{ resultSenateNo() }}</span> }
-            @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
-          </p>
-        }
-        <p class="banner-sub">{{ resultEvent() }}</p>
-        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
-        <p class="banner-sub">Confirmed registration — not checked in.</p>
-      }
-      @case ('already') {
-        <mat-icon class="banner-icon">error</mat-icon>
-        <h2>Already checked in</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultEvent() }}</p>
-        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
-      }
-      @case ('invalid') {
-        <mat-icon class="banner-icon">cancel</mat-icon>
-        <h2>Invalid pass</h2>
-        @if (resultName()) { <p class="banner-name">{{ resultName() }}</p> }
-        <p class="banner-sub">{{ resultMessage() || 'This QR code is not recognized.' }}</p>
-      }
-      @case ('unconfirmed') {
-        <mat-icon class="banner-icon">pending</mat-icon>
-        <h2>Not confirmed</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('nomatch') {
-        <mat-icon class="banner-icon">no_accounts</mat-icon>
-        <h2>Face not registered</h2>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('notreg') {
-        <mat-icon class="banner-icon">person_off</mat-icon>
-        <h2>Not registered</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-        @if (resultEvent()) { <p class="banner-sub">{{ resultEvent() }}</p> }
-      }
-      @case ('notstarted') {
-        <mat-icon class="banner-icon">event_upcoming</mat-icon>
-        <h2>Not open yet</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('ended') {
-        <mat-icon class="banner-icon">event_busy</mat-icon>
-        <h2>Event ended</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('error') {
-        <mat-icon class="banner-icon">wifi_off</mat-icon>
-        <h2>Request failed</h2>
-        <p class="banner-sub">Could not reach the server.</p>
-      }
-      @case ('mealvalid') {
-        <mat-icon class="banner-icon">restaurant</mat-icon>
-        <h2>Meal stubs redeemed</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-        @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
-      }
-      @case ('mealalready') {
-        <mat-icon class="banner-icon">error</mat-icon>
-        <h2>Already redeemed</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('mealnone') {
-        <mat-icon class="banner-icon">no_meals</mat-icon>
-        <h2>No meal stubs</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @case ('mealnotvalid') {
-        <mat-icon class="banner-icon">event_busy</mat-icon>
-        <h2>Not valid today</h2>
-        <p class="banner-name">{{ resultName() }}</p>
-        <p class="banner-sub">{{ resultMessage() }}</p>
-      }
-      @default {
-        <mat-icon class="banner-icon idle-icon">qr_code_2</mat-icon>
-        <h2>Ready to scan</h2>
-        <p class="banner-sub">
-          {{ scanAction() === 'meal' ? "Scan a pass to redeem meal stubs." : "Point the camera at a participant's pass." }}
-        </p>
-      }
-    }
-  </div>
+  </section>
 </div>
+
+<!-- Scan result pop-up: bounces in, closes itself after 3 s (or on click), then the scanner is
+     ready again. It never takes focus, so a hardware barcode scanner keeps typing into its field. -->
+@if (banner() !== 'idle') {
+  @for (seq of [resultSeq()]; track seq) {
+    <div class="result-pop-backdrop" (click)="dismissResult()">
+      <div class="result-banner result-pop" [class]="'banner-' + banner()" role="alert">
+        @switch (banner()) {
+          @case ('valid') {
+            @if (resultPhoto()) {
+              <img class="banner-photo" [src]="resultPhoto()" alt="Member photo" />
+            } @else {
+              <mat-icon class="banner-icon">check_circle</mat-icon>
+            }
+            <h2>{{ resultWelcome() || eventWelcome() || 'Welcome!' }}</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            @if (resultLevel() || resultSenateNo() || resultOrganization()) {
+              <p class="banner-meta">
+                @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
+                @if (resultSenateNo()) { <span class="meta-chip">ID No. {{ resultSenateNo() }}</span> }
+                @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
+              </p>
+            }
+            <p class="banner-sub">{{ resultEvent() }}</p>
+            @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+          }
+          @case ('verified') {
+            @if (resultPhoto()) {
+              <img class="banner-photo" [src]="resultPhoto()" alt="Member photo" />
+            } @else {
+              <mat-icon class="banner-icon">verified_user</mat-icon>
+            }
+            <h2>Verified</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            @if (resultLevel() || resultSenateNo() || resultOrganization()) {
+              <p class="banner-meta">
+                @if (resultLevel()) { <span class="meta-chip">{{ resultLevel() }}</span> }
+                @if (resultSenateNo()) { <span class="meta-chip">ID No. {{ resultSenateNo() }}</span> }
+                @if (resultOrganization()) { <span class="meta-chip">{{ resultOrganization() }}</span> }
+              </p>
+            }
+            <p class="banner-sub">{{ resultEvent() }}</p>
+            @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+            <p class="banner-sub">Confirmed registration — not checked in.</p>
+          }
+          @case ('already') {
+            <mat-icon class="banner-icon">error</mat-icon>
+            <h2>Already checked in</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultEvent() }}</p>
+            @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+          }
+          @case ('invalid') {
+            <mat-icon class="banner-icon">cancel</mat-icon>
+            <h2>Invalid pass</h2>
+            @if (resultName()) { <p class="banner-name">{{ resultName() }}</p> }
+            <p class="banner-sub">{{ resultMessage() || 'This QR code is not recognized.' }}</p>
+          }
+          @case ('unconfirmed') {
+            <mat-icon class="banner-icon">pending</mat-icon>
+            <h2>Not confirmed</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('nomatch') {
+            <mat-icon class="banner-icon">no_accounts</mat-icon>
+            <h2>Face not registered</h2>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('notreg') {
+            <mat-icon class="banner-icon">person_off</mat-icon>
+            <h2>Not registered</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+            @if (resultEvent()) { <p class="banner-sub">{{ resultEvent() }}</p> }
+          }
+          @case ('notstarted') {
+            <mat-icon class="banner-icon">event_upcoming</mat-icon>
+            <h2>Not open yet</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('ended') {
+            <mat-icon class="banner-icon">event_busy</mat-icon>
+            <h2>Event ended</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('error') {
+            <mat-icon class="banner-icon">wifi_off</mat-icon>
+            <h2>Request failed</h2>
+            <p class="banner-sub">Could not reach the server.</p>
+          }
+          @case ('mealvalid') {
+            <mat-icon class="banner-icon">restaurant</mat-icon>
+            <h2>Meal stubs redeemed</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+            @if (resultSession()) { <p class="banner-sub"><strong>{{ resultSession() }}</strong></p> }
+          }
+          @case ('mealalready') {
+            <mat-icon class="banner-icon">error</mat-icon>
+            <h2>Already redeemed</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('mealnone') {
+            <mat-icon class="banner-icon">no_meals</mat-icon>
+            <h2>No meal stubs</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+          @case ('mealnotvalid') {
+            <mat-icon class="banner-icon">event_busy</mat-icon>
+            <h2>Not valid today</h2>
+            <p class="banner-name">{{ resultName() }}</p>
+            <p class="banner-sub">{{ resultMessage() }}</p>
+          }
+        }
+        <span class="pop-timer" [style.animation-duration.ms]="popupMs"></span>
+      </div>
+    </div>
+  }
+}
 
 
 <!-- Shared event totals (database snapshot), with an explicit label when they may be outdated. -->

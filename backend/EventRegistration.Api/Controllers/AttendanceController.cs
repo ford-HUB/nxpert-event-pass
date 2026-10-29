@@ -60,8 +60,8 @@ public class AttendanceController : ControllerBase
         await _notify.AttendeesChangedAsync(eventId, Array.Empty<int>(), new[] { reg.Id });
         await _notify.FaceGalleryChangedAsync(eventId);
 
-        // A confirmed online / hybrid registration had a calendar invite — withdraw it.
-        if (reg.Event is not null && EventFormats.HasOnline(reg.Event.Format))
+        // A confirmed registration had a calendar invite — withdraw it.
+        if (reg.Event is not null)
         {
             try { await _pass.SendMeetingCancelAsync(reg.Event, reg, MeetingCancelReason.RegistrationCancelled); }
             catch { /* the delete itself succeeded; the calendar update is best-effort */ }

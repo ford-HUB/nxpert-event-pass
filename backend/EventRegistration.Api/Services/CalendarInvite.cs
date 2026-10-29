@@ -4,12 +4,11 @@ using EventRegistration.Api.Models;
 namespace EventRegistration.Api.Services;
 
 /// <summary>
-/// Builds iCalendar (.ics, RFC 5545) meeting invites for Online / Hybrid events, attached to the
-/// confirmation email so the meeting lands in the registrant's calendar (Outlook, Gmail, phones).
+/// Builds iCalendar (.ics, RFC 5545) requests for invitations and confirmations across all event formats.
 ///
-/// Each registration gets one stable UID, so a later invite with a higher SEQUENCE replaces the
+/// Each event/sub-event gets a stable UID, so a later invite with a higher SEQUENCE replaces the
 /// calendar entry (time/link change) and a CANCEL removes it (registration cancelled / event
-/// deleted). Event times are stored as server-local time and converted to UTC here.
+/// deleted). Stored Philippine wall-clock times are converted to UTC independently of the server timezone.
 /// </summary>
 public static class CalendarInvite
 {
@@ -20,16 +19,31 @@ public static class CalendarInvite
     public sealed record Details(
         string Uid, int Sequence, string Title, DateTime StartsAt, DateTime EndsAt,
         string? Venue, string MeetingUrl, string? Description,
-        string OrganizerName, string OrganizerEmail, string AttendeeName, string AttendeeEmail);
+        string OrganizerName, string OrganizerEmail, string AttendeeName, string AttendeeEmail,
+        IReadOnlyList<(string Email, bool Optional)>? Recipients = null);
+
+    public static string EventUid(Event ev) => $"event-{ev.PublicSlug}@nxpass";
+
+    public static EmailAttachment ForInvitation(Event ev, string organizerName, string organizerEmail,
+        IReadOnlyCollection<string> to, IReadOnlyCollection<string> cc, string registerUrl, bool cancel = false)
+    {
+        if (ev.StartsAt == default || ev.EndsAt <= ev.StartsAt)
+            throw new ArgumentException("Set a valid start and end date/time for this event before sending invitations.");
+        var recipients = to.Select(e => (e, false)).Concat(cc.Select(e => (e, true))).ToList();
+        var details = new Details(EventUid(ev), ev.InviteSequence, ev.Title, ev.StartsAt, ev.EndsAt,
+            EventFormats.HasVenue(ev.Format) ? ev.Venue : null, registerUrl,
+            ev.Description, organizerName, organizerEmail, "", "", recipients);
+        return new EmailAttachment(FileName, cancel ? Cancel(details) : Request(details), ContentType(cancel));
+    }
 
     /// <summary>
-    /// Resolve invite details for a registration, or null when the event has no online part or
-    /// no usable meeting link. Requires <c>reg.Session</c> to be loaded for sub-event registrations.
+    /// Resolve a registration's calendar details using a confirmed meeting link or registration URL.
+    /// Requires <c>reg.Session</c> to be loaded for sub-event registrations.
     /// </summary>
-    public static Details? For(Event ev, Registration reg, string organizerName, string organizerEmail)
+    public static Details? For(Event ev, Registration reg, string organizerName, string organizerEmail, string? registerUrl = null)
     {
-        if (!EventFormats.HasOnline(ev.Format)) return null;
-        var url = MeetingUrlFor(ev, reg.Session);
+        var url = EventFormats.HasOnline(ev.Format) ? MeetingUrlFor(ev, reg.Session) : null;
+        url ??= registerUrl;
         var email = reg.DisplayEmail;
         if (url is null || string.IsNullOrWhiteSpace(email)) return null;
 
@@ -40,7 +54,7 @@ public static class CalendarInvite
         var venue = EventFormats.HasVenue(ev.Format) ? (reg.Session?.Venue ?? ev.Venue) : null;
 
         return new Details(
-            $"reg-{reg.Token:N}@nxpass", ev.InviteSequence, title, starts, ends, venue, url,
+            reg.SessionId is int sid ? $"event-{ev.PublicSlug}-session-{sid}@nxpass" : EventUid(ev), ev.InviteSequence, title, starts, ends, venue, url,
             reg.Session?.Description ?? (string.IsNullOrWhiteSpace(ev.Description) ? null : ev.Description),
             organizerName, organizerEmail, reg.DisplayName, email!);
     }
@@ -68,11 +82,11 @@ public static class CalendarInvite
     private static byte[] Build(Details d, bool cancel)
     {
         var desc = new StringBuilder();
-        desc.Append("Join the online meeting: ").Append(d.MeetingUrl);
+        desc.Append("Event link: ").Append(d.MeetingUrl);
         if (d.Venue is not null) desc.Append("\n\nIn person: ").Append(d.Venue);
         if (!string.IsNullOrWhiteSpace(d.Description)) desc.Append("\n\n").Append(d.Description!.Trim());
 
-        var location = d.Venue is not null ? $"{d.Venue} / Online meeting" : "Online meeting";
+        var location = d.Venue ?? "Online meeting";
         // Cancellations must carry a higher SEQUENCE than the invite they remove.
         var seq = cancel ? d.Sequence + 1 : d.Sequence;
 
@@ -86,20 +100,24 @@ public static class CalendarInvite
             "BEGIN:VEVENT",
             $"UID:{d.Uid}",
             $"SEQUENCE:{seq}",
-            $"DTSTAMP:{Utc(DateTime.Now)}",
+            $"DTSTAMP:{Utc(DateTime.UtcNow)}",
             $"DTSTART:{Utc(d.StartsAt)}",
             $"DTEND:{Utc(d.EndsAt)}",
             $"SUMMARY:{Escape(d.Title)}",
             $"DESCRIPTION:{Escape(desc.ToString())}",
             $"LOCATION:{Escape(location)}",
-            $"URL:{d.MeetingUrl}",
+            $"URL:{Escape(d.MeetingUrl)}",
             $"ORGANIZER;CN={Param(d.OrganizerName)}:mailto:{d.OrganizerEmail}",
-            $"ATTENDEE;CN={Param(d.AttendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:{d.AttendeeEmail}",
-            // Outlook shows its "Join" button for Teams links carried in this property.
-            $"X-MICROSOFT-SKYPETEAMSMEETINGURL:{d.MeetingUrl}",
             $"STATUS:{(cancel ? "CANCELLED" : "CONFIRMED")}",
             "TRANSP:OPAQUE",
         };
+        if (d.Recipients is not null)
+            foreach (var (email, optional) in d.Recipients)
+                lines.Add($"ATTENDEE;ROLE={(optional ? "OPT" : "REQ")}-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{email}");
+        else lines.Add($"ATTENDEE;CN={Param(d.AttendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{d.AttendeeEmail}");
+        if (Uri.TryCreate(d.MeetingUrl, UriKind.Absolute, out var meeting) &&
+            (meeting.Host.Equals("teams.microsoft.com", StringComparison.OrdinalIgnoreCase) || meeting.Host.Equals("teams.live.com", StringComparison.OrdinalIgnoreCase)))
+            lines.Add($"X-MICROSOFT-SKYPETEAMSMEETINGURL:{Escape(d.MeetingUrl)}");
         if (!cancel)
         {
             // 15-minute reminder.
@@ -117,10 +135,12 @@ public static class CalendarInvite
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    // Event times are server-local; iCalendar gets UTC ("Z") so every client shows the right time.
+    // The event form stores Philippine wall-clock times without an offset. Never
+    // interpret those using the web server's timezone (which can be UTC under IIS/cloud).
     private static string Utc(DateTime local) =>
-        DateTime.SpecifyKind(local, local.Kind == DateTimeKind.Utc ? DateTimeKind.Utc : DateTimeKind.Local)
-            .ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'");
+        (local.Kind == DateTimeKind.Utc ? local : TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(local, DateTimeKind.Unspecified), TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila")))
+            .ToString("yyyyMMdd'T'HHmmss'Z'");
 
     // TEXT value escaping (RFC 5545 §3.3.11).
     private static string Escape(string s) => s
@@ -128,7 +148,7 @@ public static class CalendarInvite
         .Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\\n");
 
     // Parameter values (CN=…) can't contain ; : , or quotes unless quoted.
-    private static string Param(string s) => $"\"{s.Replace("\"", "'")}\"";
+    private static string Param(string s) => $"\"{s.Replace("\r", "").Replace("\n", "").Replace("\"", "'")}\"";
 
     // Fold lines longer than 75 octets (RFC 5545 §3.1), without splitting a UTF-8 sequence.
     private static string Fold(string line)

@@ -8,7 +8,6 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies import get_settings_dependency, get_tracking_service
 from app.api.v1.presenters import present_event, present_snapshot
 from app.core.config import Settings
-from app.core.exceptions import StreamUnavailableError
 from app.schemas.tracking import (
     DetectionModeRequest,
     RecognitionEventResponse,
@@ -23,6 +22,8 @@ router = APIRouter(prefix="/stream", tags=["stream"])
 
 TrackingDependency = Annotated[TrackingService, Depends(get_tracking_service)]
 MJPEG_BOUNDARY = "frame"
+# How long a viewer waits for a frame before re-checking that tracking is still running.
+FRAME_WAIT_SECONDS = 0.5
 NO_CACHE_HEADERS = {"Cache-Control": "no-store"}
 
 
@@ -90,16 +91,19 @@ def set_detection_mode(request: DetectionModeRequest, service: TrackingDependenc
 
 
 def _mjpeg_frames(service: TrackingService, frame_interval_seconds: float) -> Iterator[bytes]:
+    """Send each new frame as soon as it is published, at most one per frame interval."""
     last_jpeg: bytes | None = None
+    last_sent_at = 0.0
     while service.is_running:
-        try:
-            jpeg = service.get_latest_jpeg()
-        except StreamUnavailableError:
-            jpeg = None
-        if jpeg is not None and jpeg is not last_jpeg:
-            last_jpeg = jpeg
-            yield (
-                f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n"
-                f"Content-Length: {len(jpeg)}\r\n\r\n"
-            ).encode() + jpeg + b"\r\n"
-        time.sleep(frame_interval_seconds)
+        delay = last_sent_at + frame_interval_seconds - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+        jpeg = service.wait_for_new_jpeg(last_jpeg, FRAME_WAIT_SECONDS)
+        if jpeg is None:
+            continue
+        last_jpeg = jpeg
+        last_sent_at = time.monotonic()
+        yield (
+            f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n"
+            f"Content-Length: {len(jpeg)}\r\n\r\n"
+        ).encode() + jpeg + b"\r\n"

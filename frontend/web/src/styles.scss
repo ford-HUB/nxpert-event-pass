@@ -2599,3 +2599,39 @@ mat-card-actions {
     mat-icon { color: #d97706; }
   }
 }
+
+/* ===== Print a single QR pass (AttendeePassDialogComponent.print) =====
+   While body.printing-pass is set, only the pass dialog is printed — no app shell,
+   backdrop, buttons or email notes. */
+@media print {
+  body.printing-pass {
+    background: #fff;
+
+    > *:not(.cdk-overlay-container),
+    .cdk-overlay-backdrop,
+    .cdk-overlay-pane:not(.pass-print-pane),
+    .pass-print-pane .mat-mdc-dialog-actions,
+    .pass-print-pane .no-print {
+      display: none !important;
+    }
+
+    .cdk-overlay-container,
+    .cdk-global-overlay-wrapper,
+    .pass-print-pane {
+      position: static !important;
+      display: block !important;
+      width: 100% !important;
+      max-width: none !important;
+    }
+
+    .pass-print-pane .mat-mdc-dialog-surface {
+      box-shadow: none !important;
+      text-align: center;
+    }
+
+    .pass-print-pane .mat-mdc-dialog-content {
+      max-height: none !important;
+      overflow: visible !important;
+    }
+  }
+}

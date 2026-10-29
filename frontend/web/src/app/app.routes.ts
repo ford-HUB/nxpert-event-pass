@@ -45,6 +45,12 @@ export const routes: Routes = [
       import('./pages/events-browse/events-browse').then((m) => m.EventsBrowseComponent),
   },
   {
+    // Event calendar (merchants only scan meal stubs).
+    path: 'calendar',
+    canActivate: [nonMerchantGuard],
+    loadComponent: () => import('./pages/calendar/calendar').then((m) => m.CalendarComponent),
+  },
+  {
     path: 'my-events',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/my-events/my-events').then((m) => m.MyEventsComponent),

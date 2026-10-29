@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import partial
 
 from fastapi import Request
 
@@ -16,7 +17,7 @@ from app.services.enrollment_service import EnrollmentService
 from app.services.recognition_service import RecognitionService
 from app.services.track_state import DetectionMode
 from app.services.tracking_service import TrackingConfig, TrackingService
-from app.utils.video_stream import OpenCvVideoStream
+from app.utils.video_stream import CaptureFormat, OpenCvVideoStream
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,7 @@ def wire_services(
     tracking_service = TrackingService(
         tracking_analyzer,
         recognition_service,
-        source_factory=OpenCvVideoStream,
+        source_factory=partial(OpenCvVideoStream, capture_format=_capture_format(settings)),
         video_source=settings.video_source,
         config=_tracking_config(settings),
         on_identified=check_in_service.record_identification,
@@ -97,6 +98,15 @@ def wire_services(
         tracking_service=tracking_service,
         check_in_service=check_in_service,
         execution_providers=execution_providers,
+    )
+
+
+def _capture_format(settings: Settings) -> CaptureFormat:
+    return CaptureFormat(
+        width=settings.video_capture_width,
+        height=settings.video_capture_height,
+        fps=settings.video_capture_fps,
+        mjpg=settings.video_capture_mjpg,
     )
 
 
@@ -119,6 +129,7 @@ def _tracking_config(settings: Settings) -> TrackingConfig:
         detection_mode=DetectionMode(settings.detection_mode),
         steady_frames=settings.steady_frames,
         steady_max_speed=settings.steady_max_speed,
+        mirror_video=settings.stream_mirror,
     )
 
 

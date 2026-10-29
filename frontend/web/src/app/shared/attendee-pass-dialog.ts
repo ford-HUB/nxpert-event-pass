@@ -13,6 +13,7 @@ interface AttendeePassData {
   eventId: number;
   eventTitle: string;
   attendee: AttendeeDto;
+  autoPrint?: boolean; // open the browser print dialog as soon as the QR has rendered
 }
 
 @Component({
@@ -29,7 +30,7 @@ interface AttendeePassData {
       <div class="qr-wrap">
         @if (qrDataUrl()) {
           <img [src]="qrDataUrl()" [alt]="'QR pass for ' + data.attendee.fullName"
-               width="260" height="260" />
+               width="260" height="260" (load)="onQrRendered()" />
         } @else if (qrError()) {
           <div role="alert">
             <p>{{ qrError() }}</p>
@@ -40,16 +41,19 @@ interface AttendeePassData {
         }
       </div>
       <p class="muted pass-hint">Present this code at the door for check-in.</p>
-      <p class="email">{{ registeredEmail() || 'No registered email address.' }}</p>
+      <p class="email no-print">{{ registeredEmail() || 'No registered email address.' }}</p>
       @if (!confirmedAt()) {
-        <p class="muted">Confirm this registration in Attendance before emailing the pass.</p>
+        <p class="muted no-print">Confirm this registration in Attendance before emailing the pass.</p>
       }
       @if (emailStatus()) {
-        <p role="status">{{ emailStatus() }}</p>
+        <p role="status" class="no-print">{{ emailStatus() }}</p>
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>Close</button>
+      <button mat-stroked-button (click)="print()" [disabled]="!qrDataUrl()">
+        <mat-icon>print</mat-icon> Print
+      </button>
       <button mat-stroked-button (click)="resend()"
               [disabled]="sending() || !registeredEmail() || !confirmedAt()">
         <mat-icon>email</mat-icon> {{ sending() ? 'Sending…' : 'Resend email' }}
@@ -106,6 +110,24 @@ export class AttendeePassDialogComponent implements OnInit {
         ? 'Pass unavailable. The attendee may have been removed, or the API needs the QR pass update. Refresh Attendance after updating the backend.'
         : 'Could not load the QR pass. Please try again.');
     }
+  }
+
+  private autoPrinted = false;
+
+  onQrRendered(): void {
+    if (this.data.autoPrint && !this.autoPrinted) {
+      this.autoPrinted = true;
+      this.print();
+    }
+  }
+
+  // Prints just this pass: the global print styles hide everything but the pass dialog while
+  // body.printing-pass is set.
+  print(): void {
+    if (!this.qrDataUrl()) return;
+    document.body.classList.add('printing-pass');
+    window.addEventListener('afterprint', () => document.body.classList.remove('printing-pass'), { once: true });
+    window.print();
   }
 
   async download(): Promise<void> {

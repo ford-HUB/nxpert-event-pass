@@ -46,6 +46,8 @@ public static class EventStatus
 public static class InvitationStatus
 {
     public const string Sent = "Sent";
+    // Saved to the outbox because SMTP was disabled or failed.
+    public const string Queued = "Queued";
     public const string Registered = "Registered";
 }
 

@@ -219,7 +219,9 @@
 
   // The module launcher uses a wider canvas so cards sit five across.
   &:has(.home),
-  &:has(.user-master) {
+  &:has(.user-master),
+  &:has(.ed-page),
+  &:has(.el-page) {
     max-width: 1400px;
     padding-top: 32px;
   }

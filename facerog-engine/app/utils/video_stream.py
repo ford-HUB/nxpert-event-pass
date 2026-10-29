@@ -2,6 +2,7 @@ import logging
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from typing import Protocol
 
 import cv2
@@ -28,15 +29,52 @@ def parse_video_source(source: str) -> int | str:
     return int(source) if source.isdigit() else source
 
 
-def open_capture(source: int | str) -> cv2.VideoCapture:
+@dataclass(frozen=True)
+class CaptureFormat:
+    """What to ask a webcam for. 0 leaves that setting at the camera's default."""
+
+    width: int = 0
+    height: int = 0
+    fps: float = 0.0
+    mjpg: bool = True
+
+
+def open_capture(
+    source: int | str, capture_format: CaptureFormat | None = None
+) -> cv2.VideoCapture:
     """Open a video source. Windows webcams use DirectShow first, because the default
     Media Foundation backend often fails with "can't grab frame" on laptop cameras."""
     if isinstance(source, int) and sys.platform == "win32":
         capture = cv2.VideoCapture(source, cv2.CAP_DSHOW)
-        if capture.isOpened():
-            return capture
-        capture.release()
-    return cv2.VideoCapture(source)
+        if not capture.isOpened():
+            capture.release()
+            capture = cv2.VideoCapture(source)
+    else:
+        capture = cv2.VideoCapture(source)
+    if isinstance(source, int) and capture_format is not None and capture.isOpened():
+        _request_format(capture, capture_format)
+    return capture
+
+
+def _request_format(capture: cv2.VideoCapture, capture_format: CaptureFormat) -> None:
+    """Ask a webcam for its frame size and rate. Uncompressed video (the usual default) can't
+    carry 720p much above 10 fps over USB 2, so most webcams only reach 30-60 fps in MJPG.
+    The camera picks the nearest mode it supports; the result is logged."""
+    if capture_format.mjpg:
+        # Must come before the size: DirectShow picks the mode when the size is set.
+        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
+    if capture_format.width:
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, capture_format.width)
+    if capture_format.height:
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, capture_format.height)
+    if capture_format.fps:
+        capture.set(cv2.CAP_PROP_FPS, capture_format.fps)
+    logger.info(
+        "Webcam mode: %dx%d at %.0f fps",
+        capture.get(cv2.CAP_PROP_FRAME_WIDTH),
+        capture.get(cv2.CAP_PROP_FRAME_HEIGHT),
+        capture.get(cv2.CAP_PROP_FPS),
+    )
 
 
 class OpenCvVideoStream:
@@ -46,8 +84,9 @@ class OpenCvVideoStream:
     Video files loop; cameras and streams reconnect after failures.
     """
 
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, capture_format: CaptureFormat | None = None) -> None:
         self._source = parse_video_source(source)
+        self._capture_format = capture_format
         self._lock = threading.Lock()
         self._frame: np.ndarray | None = None
         self._frame_number = 0
@@ -78,7 +117,7 @@ class OpenCvVideoStream:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            capture = open_capture(self._source)
+            capture = open_capture(self._source, self._capture_format)
             if not capture.isOpened():
                 logger.warning("Cannot open video source %r; retrying", self._source)
                 self._is_open = False

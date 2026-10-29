@@ -43,8 +43,17 @@ class Settings(BaseSettings):
     video_source: str = "0"
     video_autostart: bool = True
     video_frame_width: int = 960
+    # What to ask a webcam for (0 = camera default). It picks the nearest mode it supports, so
+    # 60 fps only happens on a camera that has a 60 fps mode; the chosen mode is logged at start.
+    video_capture_width: int = Field(default=1280, ge=0)
+    video_capture_height: int = Field(default=720, ge=0)
+    video_capture_fps: float = Field(default=60.0, ge=0.0)
+    video_capture_mjpg: bool = True
     stream_jpeg_quality: int = Field(default=80, ge=10, le=100)
-    stream_max_fps: float = 25.0
+    stream_max_fps: float = Field(default=60.0, gt=0.0)
+    # Show the live video mirrored, like a selfie camera. Display only: recognition and QR
+    # reading always use the camera's real image.
+    stream_mirror: bool = True
 
     track_high_threshold: float = 0.6
     track_low_threshold: float = 0.2

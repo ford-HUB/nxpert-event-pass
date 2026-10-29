@@ -11,6 +11,7 @@ import {
 } from '../../core/face-engine.service';
 import { AttendeeDto, CheckInResult } from '../../core/models';
 import { RealtimeService } from '../../core/realtime.service';
+import { TvBanner, TvBannerService } from '../../core/tv-banner.service';
 
 const POLL_MS = 500;
 // The gallery re-syncs as soon as the backend reports a change (registration added/removed,
@@ -38,6 +39,21 @@ const CAMERA_WIDTH_KEY = 'nxpass.tvCameraWidth';
 const CAMERA_MIN_WIDTH = 120;
 const CAMERA_ASPECT = 16 / 9;
 const CAMERA_KEY_STEP = 24;
+// How a banner fills the screen, remembered per device: cover (no borders, may crop), contain
+// (whole image over a blurred copy of itself) or fill (stretched to the screen).
+type BannerFit = 'cover' | 'contain' | 'fill';
+const BANNER_FIT_KEY = 'nxpass.tvBannerFit';
+const BANNER_FITS: BannerFit[] = ['cover', 'contain', 'fill'];
+const BANNER_NOTICE_MS = 6000;
+
+function loadBannerFit(): BannerFit {
+  try {
+    const v = localStorage.getItem(BANNER_FIT_KEY) as BannerFit | null;
+    return v && BANNER_FITS.includes(v) ? v : 'cover';
+  } catch {
+    return 'cover';
+  }
+}
 
 function loadCameraWidth(): number | null {
   try {
@@ -96,6 +112,7 @@ export class FaceTvComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private engine = inject(FaceEngineService);
   private realtime = inject(RealtimeService);
+  private tvBanners = inject(TvBannerService);
 
   readonly eventId = Number(this.route.snapshot.paramMap.get('eventId'));
   readonly cameraUrl = signal(this.engine.streamUrl());
@@ -151,6 +168,24 @@ export class FaceTvComponent implements OnInit, OnDestroy {
 
   // The attendee sidebar can be closed so the stage takes the full width.
   readonly sideOpen = signal(true);
+
+  // Camera off pauses check-in (the engine releases the webcam) and shows the standby banner:
+  // the banner uploaded on this device, else the event's saved banner. Turning it back on
+  // returns to the normal check-in screen.
+  readonly cameraOn = signal(true);
+  readonly cameraSwitching = signal(false);
+  readonly bannerFit = signal<BannerFit>(loadBannerFit());
+  readonly bannerFits: { value: BannerFit; label: string; hint: string }[] = [
+    { value: 'cover', label: 'Fill screen', hint: 'Covers the whole screen without borders; edges may be cropped' },
+    { value: 'contain', label: 'Fit whole image', hint: 'Shows the whole image over a blurred copy of itself' },
+    { value: 'fill', label: 'Stretch', hint: 'Fills the screen and shows everything, but may distort the image' },
+  ];
+  // Custom TV banner, saved per event in this browser (IndexedDB).
+  readonly customBanner = signal<TvBanner | null>(null);
+  readonly bannerBusy = signal(false);
+  readonly bannerNotice = signal<string | null>(null);
+  readonly canEditBanner = computed(() => !this.cameraOn() && !this.cameraSwitching() && !this.bannerBusy());
+  readonly standbyImage = computed(() => this.customBanner()?.image ?? this.eventBanner());
 
   // Right-side list: every registration of the event, latest check-in first, then the rest by name.
   readonly attendees = signal<AttendeeDto[]>([]);
@@ -252,6 +287,9 @@ export class FaceTvComponent implements OnInit, OnDestroy {
   private galleryLoading = false;
   private galleryReloadQueued = false;
   private hubWasDown = false;
+  private destroyed = false;
+  private bannerVersion = 0;
+  private bannerNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.realtime.faceGalleryChanged$
@@ -282,6 +320,7 @@ export class FaceTvComponent implements OnInit, OnDestroy {
     this.loadEvent();
     this.loadGallery();
     this.loadAttendees();
+    this.loadCustomBanner();
     this.poll();
     this.timers.push(
       setInterval(() => this.poll(), POLL_MS),
@@ -293,9 +332,11 @@ export class FaceTvComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.timers.forEach(clearInterval);
     if (this.showTimer) clearTimeout(this.showTimer);
     if (this.cameraRetry) clearTimeout(this.cameraRetry);
+    if (this.bannerNoticeTimer) clearTimeout(this.bannerNoticeTimer);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     // Hand the webcam back to the browser scanner (Exit goes straight back to it).
     this.engine.stopStream().subscribe({ error: () => {} });
@@ -475,13 +516,115 @@ export class FaceTvComponent implements OnInit, OnDestroy {
   }
 
   onCameraError(): void {
-    if (this.cameraRetry) return;
+    if (this.cameraRetry || !this.cameraOn()) return;
     // Start again too (a no-op if it's running): the engine may have restarted, or the camera
     // was released by another page.
     this.cameraRetry = setTimeout(() => {
       this.cameraRetry = null;
-      this.startCamera();
+      if (this.cameraOn()) this.startCamera();
     }, CAMERA_RETRY_MS);
+  }
+
+  // ---- Camera on / off ----
+
+  async setCamera(on: boolean): Promise<void> {
+    if (this.cameraSwitching() || on === this.cameraOn()) return;
+    this.cameraSwitching.set(true);
+    try {
+      if (on) {
+        this.cameraOn.set(true);
+        this.startCamera();
+      } else {
+        this.cameraOn.set(false);
+        this.clearShown();
+        if (this.cameraRetry) {
+          clearTimeout(this.cameraRetry);
+          this.cameraRetry = null;
+        }
+        await firstValueFrom(this.engine.stopStream().pipe(timeout(EXIT_RELEASE_TIMEOUT_MS)));
+      }
+    } catch {
+      /* engine offline or slow — it has no stream to show either way */
+    } finally {
+      this.cameraSwitching.set(false);
+    }
+  }
+
+  // Drops the current and queued welcome screens.
+  private clearShown(): void {
+    if (this.showTimer) clearTimeout(this.showTimer);
+    this.showTimer = null;
+    this.current.set(null);
+    this.waiting.set([]);
+  }
+
+  // ---- Banner display ----
+
+  setBannerFit(fit: BannerFit): void {
+    this.bannerFit.set(fit);
+    try {
+      localStorage.setItem(BANNER_FIT_KEY, fit);
+    } catch {
+      /* storage unavailable — keep the in-memory choice */
+    }
+  }
+
+  private async loadCustomBanner(): Promise<void> {
+    const version = this.bannerVersion;
+    try {
+      const saved = await this.tvBanners.load(this.eventId);
+      if (!this.destroyed && version === this.bannerVersion) this.customBanner.set(saved);
+    } catch {
+      /* no saved banner, or storage unavailable — the event banner is used */
+    }
+  }
+
+  // PNG / JPEG / WebP up to 10 MB; only while the camera is off.
+  async uploadBanner(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.canEditBanner()) return;
+    const version = ++this.bannerVersion;
+    this.bannerBusy.set(true);
+    try {
+      const banner = await this.tvBanners.prepare(file, this.eventId);
+      if (this.destroyed || version !== this.bannerVersion || this.cameraOn()) return;
+      this.customBanner.set(banner);
+      try {
+        await this.tvBanners.save(banner);
+      } catch {
+        this.showBannerNotice('Banner shown for this session only — browser storage is unavailable.');
+      }
+    } catch (error) {
+      if (version === this.bannerVersion)
+        this.showBannerNotice(error instanceof Error ? error.message : 'Could not read the banner image.');
+    } finally {
+      this.bannerBusy.set(false);
+    }
+  }
+
+  async removeBanner(): Promise<void> {
+    if (!this.canEditBanner() || !this.customBanner()) return;
+    ++this.bannerVersion;
+    this.bannerBusy.set(true);
+    try {
+      await this.tvBanners.remove(this.eventId);
+      this.customBanner.set(null);
+    } catch {
+      this.showBannerNotice('Could not remove the saved banner. Please try again.');
+    } finally {
+      this.bannerBusy.set(false);
+    }
+  }
+
+  private showBannerNotice(message: string): void {
+    this.bannerNotice.set(message);
+    if (this.bannerNoticeTimer) clearTimeout(this.bannerNoticeTimer);
+    this.bannerNoticeTimer = setTimeout(() => {
+      this.bannerNoticeTimer = null;
+      this.bannerNotice.set(null);
+    }, BANNER_NOTICE_MS);
   }
 
   private async poll(): Promise<void> {
@@ -505,11 +648,13 @@ export class FaceTvComponent implements OnInit, OnDestroy {
       this.displaySeconds.set(data.display_seconds);
       this.lastSequence = data.last_sequence;
       const replayAfter = Date.now() / 1000 - REPLAY_RECENT_SECONDS;
-      const fresh = data.check_ins.filter((c) => !isFirstLoad || c.checked_in_at >= replayAfter);
+      const fresh = this.cameraOn()
+        ? data.check_ins.filter((c) => !isFirstLoad || c.checked_in_at >= replayAfter)
+        : [];
       // Recorded together, so people recognized in the same frame are shown in order.
       const items = await Promise.all(fresh.map((c) => this.record(c)));
       if (items.length) {
-        this.waiting.update((list) => [...list, ...items]);
+        if (this.cameraOn()) this.waiting.update((list) => [...list, ...items]);
         this.loadAttendees();
       }
       this.showNext();

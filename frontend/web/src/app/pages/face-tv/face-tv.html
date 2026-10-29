@@ -1,6 +1,9 @@
 <div class="layout" [class.side-closed]="!sideOpen()">
   <!-- The event banner fills the whole screen: behind the idle stage and the glass attendee panel. -->
-  @if (eventBanner()) { <img class="stage-backdrop" [src]="eventBanner()" alt="" /> }
+  @if (eventBanner(); as banner) {
+    @if (bannerFit() === 'contain') { <img class="stage-backdrop backdrop-blur" [src]="banner" alt="" /> }
+    <img [class]="'stage-backdrop fit-' + bannerFit()" [src]="banner" alt="" />
+  }
   <main class="stage">
     <!-- One entry, keyed by sequence: each person gets a fresh view, so the animations restart. -->
     @for (item of shown(); track item.sequence) {
@@ -36,20 +39,29 @@
       </section>
     }
 
+    @if (cameraOn()) {
     <div class="camera-preview" [style.width.px]="cameraWidth()">
       <img [src]="cameraUrl()" alt="Live camera" (error)="onCameraError()" />
+      <!-- QR only: a scan square like the browser scanner's, so people know where to hold the
+           pass. Face and Auto look at the whole picture, so they show none. -->
+      @if (scanMode() === 'qr') {
+        <div class="qr-viewfinder" aria-hidden="true"><div class="qr-frame"></div></div>
+      }
       <!-- Drag the corner to resize; double-click resets. Hidden in fullscreen. -->
       <button type="button" class="camera-resize" aria-label="Resize camera preview"
               title="Drag to resize · double-click to reset"
               (pointerdown)="startCameraResize($event)" (dblclick)="resetCameraSize()"
               (keydown)="onCameraResizeKey($event)"></button>
     </div>
-
-    @if (!engineOnline() || galleryError()) {
-      <p class="stage-problem" role="status">
-        {{ !engineOnline() ? 'Face engine offline — retrying' : galleryMessage() }}
-      </p>
     }
+
+    <div class="stage-status">
+      @if (!engineOnline() || galleryError()) {
+        <p class="stage-problem" role="status">
+          {{ !engineOnline() ? 'Face engine offline — retrying' : galleryMessage() }}
+        </p>
+      }
+    </div>
 
     <div class="stage-actions">
       <div class="mode-switch" role="group" aria-label="Check in with">
@@ -66,6 +78,16 @@
           }
         </div>
       }
+      @if (eventBanner()) {
+        <div class="mode-switch" role="group" aria-label="Banner display">
+          @for (f of bannerFits; track f.value) {
+            <button type="button" [class.active]="bannerFit() === f.value" [title]="f.hint"
+                    [attr.aria-pressed]="bannerFit() === f.value" (click)="setBannerFit(f.value)">{{ f.label }}</button>
+          }
+        </div>
+      }
+      <button type="button" (click)="setCamera(false)" [disabled]="cameraSwitching()"
+              title="Pause check-in and show the standby banner">Turn camera off</button>
       @if (!sideOpen()) { <button type="button" (click)="sideOpen.set(true)">Attendees</button> }
       <button type="button" (click)="toggleFullscreen()">Fullscreen</button>
       <button type="button" (click)="exit()" [disabled]="exiting()">Exit</button>
@@ -76,7 +98,9 @@
     <aside class="side" aria-label="Attendees">
       <header class="side-head">
         <h2>Attendees</h2>
-        <span class="side-count">{{ checkedInCount() }} / {{ attendees().length }} checked in</span>
+        <span class="side-count">
+          {{ checkedInCount() }} / {{ attendees().length }} checked in
+        </span>
         <button type="button" class="side-close" (click)="sideOpen.set(false)" aria-label="Close attendees" title="Close">&times;</button>
       </header>
 
@@ -111,3 +135,47 @@
     </aside>
   }
 </div>
+
+<!-- Camera off: the standby banner over the whole screen; the buttons float on top of it. -->
+@if (!cameraOn()) {
+  <section class="standby" aria-label="Standby display">
+    @if (standbyImage(); as image) {
+      @if (bannerFit() === 'contain') { <img class="standby-image backdrop-blur" [src]="image" alt="" /> }
+      <img [class]="'standby-image fit-' + bannerFit()" [src]="image"
+           [alt]="customBanner()?.name || eventTitle() + ' banner'" />
+    } @else {
+      <div class="idle standby-idle">
+        <p class="kicker">{{ eventWelcome() || 'Welcome to' }}</p>
+        @if (eventTitle()) { <h1 class="idle-event">{{ eventTitle() }}</h1> }
+        <h2>Check-in is paused</h2>
+        <p class="idle-hint">Upload a banner to show here, or turn the camera on to resume check-in.</p>
+      </div>
+    }
+
+    <div class="stage-status">
+      @if (bannerNotice()) { <p class="stage-problem" role="status">{{ bannerNotice() }}</p> }
+    </div>
+
+    <div class="stage-actions">
+        <div class="mode-switch" role="group" aria-label="Banner display">
+          @for (f of bannerFits; track f.value) {
+            <button type="button" [class.active]="bannerFit() === f.value" [title]="f.hint"
+                    [attr.aria-pressed]="bannerFit() === f.value" (click)="setBannerFit(f.value)">{{ f.label }}</button>
+          }
+        </div>
+        <button type="button" [disabled]="!canEditBanner()" (click)="bannerInput.click()"
+                title="PNG, JPEG or WebP up to 10 MB — saved on this device for this event">
+          {{ bannerBusy() ? 'Preparing…' : customBanner() ? 'Replace banner' : 'Upload banner' }}
+        </button>
+        @if (customBanner()) {
+          <button type="button" [disabled]="!canEditBanner()" (click)="removeBanner()"
+                  title="Go back to the event's banner">Remove banner</button>
+        }
+        <input #bannerInput type="file" accept="image/png,image/jpeg,image/webp" hidden (change)="uploadBanner($event)" />
+        <button type="button" class="primary" (click)="setCamera(true)" [disabled]="cameraSwitching()"
+                title="Resume check-in">Turn camera on</button>
+        <button type="button" (click)="toggleFullscreen()">Fullscreen</button>
+        <button type="button" (click)="exit()" [disabled]="exiting()">Exit</button>
+    </div>
+  </section>
+}

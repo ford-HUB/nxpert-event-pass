@@ -15,12 +15,15 @@ public class EventsController : ControllerBase
     private readonly ViberService _viber;
     private readonly PassService _pass;
     private readonly ILogger<EventsController> _log;
-    public EventsController(AppDbContext db, ViberService viber, PassService pass, ILogger<EventsController> log)
+    private readonly CalendarInvitationNotifier _calendars;
+    public EventsController(AppDbContext db, ViberService viber, PassService pass, ILogger<EventsController> log,
+        CalendarInvitationNotifier calendars)
     {
         _db = db;
         _viber = viber;
         _pass = pass;
         _log = log;
+        _calendars = calendars;
     }
 
     private record Counts(int Total, int CheckedIn);
@@ -505,14 +508,15 @@ public class EventsController : ControllerBase
         if (sessionError is not null) return BadRequest(new { message = sessionError });
         RebuildMeals(e, req, sessionMap);
 
-        // Online meeting details changed → bump the invite revision so re-sent invites replace
-        // the calendar entry, then notify confirmed registrants after saving.
+        // Calendar details changed → bump the invite revision so re-sent invites replace the
+        // calendar entry, then notify confirmed registrants and invitees after saving.
         var changes = before.Diff(e);
         // Steps of 2: a cancellation uses SEQUENCE+1, so a later re-invite always ranks above it.
         if (changes.Any) e.InviteSequence += 2;
 
         await _db.SaveChangesAsync();
-        if (changes.Any) await SendInviteChangesAsync(e, before, changes);
+        if (changes.Any) await SendInviteChangesAsync(e, changes);
+        if (changes.AllRegistrations) await _calendars.NotifyAsync(e);
 
         var (ev, ses) = await LoadCountsAsync(id);
         return Ok(ToDto(e, includeBanner: true, ev, ses, includeMeeting: true));
@@ -520,26 +524,26 @@ public class EventsController : ControllerBase
 
     // What an invite depends on, captured before an update so changes can be detected.
     private sealed record InviteSnapshot(
-        string Format, string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl,
-        Dictionary<int, (string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl)> Sessions)
+        string Format, string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl, string Venue,
+        string Description,
+        Dictionary<int, (string Title, DateTime StartsAt, DateTime EndsAt, string? MeetingUrl, string? Venue, string? Description)> Sessions)
     {
         public static InviteSnapshot Of(Event e) => new(
-            EventFormats.Normalize(e.Format), e.Title, e.StartsAt, e.EndsAt, e.MeetingUrl,
-            e.Sessions.Where(s => s.Id > 0).ToDictionary(s => s.Id, s => (s.Title, s.StartsAt, s.EndsAt, s.MeetingUrl)));
+            EventFormats.Normalize(e.Format), e.Title, e.StartsAt, e.EndsAt, e.MeetingUrl, e.Venue, e.Description,
+            e.Sessions.Where(s => s.Id > 0).ToDictionary(s => s.Id,
+                s => (s.Title, s.StartsAt, s.EndsAt, s.MeetingUrl, s.Venue, s.Description)));
 
         public InviteChanges Diff(Event e)
         {
-            var wasOnline = EventFormats.HasOnline(Format);
-            var isOnline = EventFormats.HasOnline(e.Format);
-            if (!wasOnline && !isOnline) return InviteChanges.None;
-            // Became online / stopped being online / event-wide details changed → everyone.
-            if (wasOnline != isOnline || Title != e.Title || StartsAt != e.StartsAt
-                || EndsAt != e.EndsAt || MeetingUrl != e.MeetingUrl)
+            // Every format has a calendar entry now. Format / event-wide details changed → everyone.
+            if (Format != EventFormats.Normalize(e.Format) || Title != e.Title || StartsAt != e.StartsAt
+                || EndsAt != e.EndsAt || MeetingUrl != e.MeetingUrl || Venue != e.Venue || Description != e.Description)
                 return new InviteChanges(true, AllRegistrations: true, new HashSet<int>());
             // Otherwise only registrations of sub-events whose own details changed.
             var changed = e.Sessions
                 .Where(s => s.Id > 0 && Sessions.TryGetValue(s.Id, out var o)
-                    && (o.Title != s.Title || o.StartsAt != s.StartsAt || o.EndsAt != s.EndsAt || o.MeetingUrl != s.MeetingUrl))
+                    && (o.Title != s.Title || o.StartsAt != s.StartsAt || o.EndsAt != s.EndsAt
+                        || o.MeetingUrl != s.MeetingUrl || o.Venue != s.Venue || o.Description != s.Description))
                 .Select(s => s.Id).ToHashSet();
             return changed.Count > 0 ? new InviteChanges(true, false, changed) : InviteChanges.None;
         }
@@ -550,9 +554,9 @@ public class EventsController : ControllerBase
         public static readonly InviteChanges None = new(false, false, new HashSet<int>());
     }
 
-    // Sends updated invites (or cancellations, when the event is no longer online) to confirmed
-    // registrants affected by an update. Delivery failures are logged, never fail the save.
-    private async Task SendInviteChangesAsync(Event e, InviteSnapshot before, InviteChanges changes)
+    // Sends updated calendar invites (including format changes) to confirmed registrants
+    // affected by an update. Delivery failures are logged, never fail the save.
+    private async Task SendInviteChangesAsync(Event e, InviteChanges changes)
     {
         var regs = await _db.Registrations.Include(r => r.User).Include(r => r.Session)
             .Where(r => r.EventId == e.Id && r.ConfirmedAt != null && r.PassEmailSentAt != null)
@@ -560,21 +564,11 @@ public class EventsController : ControllerBase
         if (!changes.AllRegistrations)
             regs = regs.Where(r => r.SessionId is int sid && changes.SessionIds.Contains(sid)).ToList();
 
-        var nowOnline = EventFormats.HasOnline(e.Format);
-        // Switched back to in person: cancel the invites that were sent under the old online details.
-        var previous = nowOnline ? null : new Event
-        {
-            Id = e.Id, Title = before.Title, Description = e.Description, StartsAt = before.StartsAt,
-            EndsAt = before.EndsAt, Venue = e.Venue, Format = before.Format,
-            MeetingUrl = before.MeetingUrl, InviteSequence = e.InviteSequence,
-        };
-
         foreach (var r in regs)
         {
             try
             {
-                if (nowOnline) await _pass.SendMeetingUpdateAsync(e, r);
-                else await _pass.SendMeetingCancelAsync(previous!, r, MeetingCancelReason.NowInPerson);
+                await _pass.SendMeetingUpdateAsync(e, r);
             }
             catch (Exception ex)
             {
@@ -607,12 +601,12 @@ public class EventsController : ControllerBase
         var e = await _db.Events.FindAsync(id);
         if (e is null) return NotFound();
 
-        // Online / hybrid: take the meeting off confirmed registrants' calendars first.
-        var invited = EventFormats.HasOnline(e.Format)
-            ? await _db.Registrations.Include(r => r.User).Include(r => r.Session)
-                .Where(r => r.EventId == id && r.ConfirmedAt != null && r.PassEmailSentAt != null)
-                .ToListAsync()
-            : new List<Registration>();
+        // Take the event off invitees' and confirmed registrants' calendars. Read them first:
+        // deleting the event cascades to their rows.
+        var calendarRecipients = await _calendars.RecipientsAsync(id);
+        var invited = await _db.Registrations.Include(r => r.User).Include(r => r.Session)
+            .Where(r => r.EventId == id && r.ConfirmedAt != null && r.PassEmailSentAt != null)
+            .ToListAsync();
 
         _db.Events.Remove(e);
         await _db.SaveChangesAsync();
@@ -622,6 +616,7 @@ public class EventsController : ControllerBase
             try { await _pass.SendMeetingCancelAsync(e, r, MeetingCancelReason.EventCancelled); }
             catch (Exception ex) { _log.LogError(ex, "Could not send meeting cancellation for registration {Id}.", r.Id); }
         }
+        await _calendars.NotifyAsync(e, cancel: true, recipients: calendarRecipients);
         return NoContent();
     }
 

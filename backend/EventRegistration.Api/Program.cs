@@ -39,6 +39,7 @@ builder.Services.AddScoped<PassService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AttendeeQuery>();
 builder.Services.AddScoped<AttendanceSummaryService>();
+builder.Services.AddScoped<CalendarInvitationNotifier>();
 builder.Services.AddSignalR();
 
 // ---- Auth ----

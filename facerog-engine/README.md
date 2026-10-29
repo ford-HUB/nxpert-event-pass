@@ -111,6 +111,14 @@ A check-in screen for a TV or projector. Press **F** or click **Fullscreen**.
 Use another source with `FRE_VIDEO_SOURCE` in `.env` (webcam index, video file or `rtsp://` URL),
 or switch at runtime with `POST /api/v1/stream/start` and `{"source": "..."}`.
 
+The live video is encoded from every camera frame on its own thread, so it plays at the camera's
+rate however slow recognition is; the boxes update as each frame finishes inference. A webcam is
+asked for `FRE_VIDEO_CAPTURE_WIDTH` x `FRE_VIDEO_CAPTURE_HEIGHT` (1280x720) at
+`FRE_VIDEO_CAPTURE_FPS` (60) in MJPG (`FRE_VIDEO_CAPTURE_MJPG`); it picks its nearest mode, which
+is logged as `Webcam mode: ...` at start. `FRE_STREAM_MAX_FPS` (60) caps what is sent to viewers.
+The video is shown mirrored like a selfie camera (`FRE_STREAM_MIRROR`, default `true`); this is
+display only, recognition and QR reading use the camera's real image.
+
 ## API (`/docs` for the interactive version)
 
 | Method | Path | Purpose |

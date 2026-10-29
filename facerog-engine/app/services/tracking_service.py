@@ -50,6 +50,7 @@ class TrackingConfig:
     detection_mode: DetectionMode = DetectionMode.STEADY
     steady_frames: int = 3
     steady_max_speed: float = 0.75
+    mirror_video: bool = True
 
 
 class TrackingService:
@@ -59,7 +60,10 @@ class TrackingService:
     run ArcFace only for tracks whose identity is unknown or due for re-verification.
     In STEADY detection mode a track is identified only once the person stands or moves a
     little; in CONTINUOUS mode right away, even while walking past.
-    Publishes an annotated JPEG, per-track zoom images and a JSON-friendly snapshot.
+    Publishes per-track zoom images, a JSON-friendly snapshot and the boxes to draw.
+
+    The live video is encoded on its own thread from every camera frame, with the newest boxes
+    drawn on, so it plays at the camera's rate even while recognition is slow.
     """
 
     def __init__(
@@ -84,8 +88,11 @@ class TrackingService:
         self._config = config
         self._source: FrameSource | None = None
         self._thread: threading.Thread | None = None
+        self._preview_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        # Signalled whenever a new video frame is published, so viewers get it right away.
+        self._frame_ready = threading.Condition(self._lock)
         # start/stop arrive on concurrent request threads (a TV page reload sends stop + start).
         self._lifecycle_lock = threading.RLock()
         self._reset_pipeline()
@@ -121,6 +128,13 @@ class TrackingService:
             daemon=True,
         )
         self._thread.start()
+        self._preview_thread = threading.Thread(
+            target=self._run_preview,
+            args=(self._source, self._stop_event),
+            name="video-preview",
+            daemon=True,
+        )
+        self._preview_thread.start()
         logger.info("Tracking started on source %r", self._video_source)
 
     def stop(self) -> None:
@@ -131,9 +145,12 @@ class TrackingService:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
+        if self._preview_thread:
+            self._preview_thread.join(timeout=5)
         if self._source:
             self._source.stop()
         self._thread = None
+        self._preview_thread = None
         self._source = None
 
     @property
@@ -160,6 +177,16 @@ class TrackingService:
         if jpeg is None:
             raise StreamUnavailableError("No frame has been processed yet.")
         return jpeg
+
+    def wait_for_new_jpeg(self, previous: bytes | None, timeout_seconds: float) -> bytes | None:
+        """Block until a video frame other than `previous` is published; None on timeout."""
+        with self._frame_ready:
+            self._frame_ready.wait_for(
+                lambda: self._latest_jpeg is not None and self._latest_jpeg is not previous,
+                timeout_seconds,
+            )
+            jpeg = self._latest_jpeg
+        return None if jpeg is previous else jpeg
 
     def get_zoom_jpeg(self, track_id: int) -> bytes:
         with self._lock:
@@ -219,6 +246,8 @@ class TrackingService:
         self._fps = 0.0
         self._frame_size = (0, 0)
         self._latest_jpeg: bytes | None = None
+        self._overlay_boxes: tuple[tuple[np.ndarray, str, tuple[int, int, int]], ...] = ()
+        self._overlay_insets: tuple[np.ndarray, ...] = ()
         self._zoom_jpegs: dict[int, bytes] = {}
         self._track_views: tuple[TrackView, ...] = ()
         self._events: deque[RecognitionEvent] = deque(maxlen=MAX_EVENTS)
@@ -236,6 +265,45 @@ class TrackingService:
             except (ValueError, RuntimeError, cv2.error) as err:
                 # Keep the stream alive through a single bad frame; log it for diagnosis.
                 logger.exception("Frame %d failed: %s", frame_number, err)
+
+    def _run_preview(self, source: FrameSource, stop_event: threading.Event) -> None:
+        last_frame_number = 0
+        while not stop_event.is_set():
+            frame_number, frame = source.read_latest()
+            if frame is None or frame_number == last_frame_number:
+                stop_event.wait(IDLE_WAIT_SECONDS)
+                continue
+            last_frame_number = frame_number
+            try:
+                self._publish_preview(frame)
+            except (ValueError, RuntimeError, cv2.error) as err:
+                logger.exception("Preview frame %d failed: %s", frame_number, err)
+
+    def _publish_preview(self, frame: np.ndarray) -> None:
+        """Encode one camera frame for the live video with the newest boxes drawn on.
+
+        The boxes come from the last frame inference finished, so they trail a moving face
+        slightly; the video itself never waits for inference.
+        """
+        frame = resize_to_width(frame, self._config.frame_width)
+        with self._lock:
+            boxes, insets = self._overlay_boxes, self._overlay_insets
+        # The capture thread shares its frame with inference: draw on a copy. Mirrored, people
+        # see themselves move the way they move, like the scanner's selfie preview; the boxes are
+        # mirrored to match, but their labels stay readable.
+        mirror = self._config.mirror_video
+        annotated = cv2.flip(frame, 1) if mirror else frame.copy()
+        width = annotated.shape[1]
+        for bbox, label, color in boxes:
+            if mirror:
+                x1, y1, x2, y2 = bbox
+                bbox = np.array([width - x2, y1, width - x1, y2], dtype=np.float32)
+            drawing.draw_track_box(annotated, bbox, label, color)
+        drawing.draw_zoom_insets(annotated, list(insets))
+        jpeg = encode_jpeg(annotated, self._config.jpeg_quality)
+        with self._frame_ready:
+            self._latest_jpeg = jpeg
+            self._frame_ready.notify_all()
 
     def _update_tracker(self, detections: list[DetectedFace]) -> list[Track]:
         bboxes = np.array([face.bbox for face in detections], dtype=np.float32).reshape(-1, 4)
@@ -321,19 +389,17 @@ class TrackingService:
 
     def _publish(self, frame: np.ndarray, states: list[TrackState], elapsed_seconds: float) -> None:
         zooms = {state.track_id: self._render_zoom(frame, state) for state in states}
-        annotated = frame.copy()
-        for state in states:
-            drawing.draw_track_box(
-                annotated, state.bbox, _track_label(state, self._is_waiting_to_settle(state)), _track_color(state)
-            )
-        angled = [zooms[s.track_id] for s in states if s.head_pose.is_angled(self._config.angled_face_threshold_degrees)]
-        drawing.draw_zoom_insets(annotated, angled)
-        jpeg = encode_jpeg(annotated, self._config.jpeg_quality)
+        boxes = tuple(
+            (s.bbox, _track_label(s, self._is_waiting_to_settle(s)), _track_color(s)) for s in states
+        )
+        angled_threshold = self._config.angled_face_threshold_degrees
+        angled = tuple(zooms[s.track_id] for s in states if s.head_pose.is_angled(angled_threshold))
         zoom_jpegs = {track_id: encode_jpeg(zoom) for track_id, zoom in zooms.items()}
         views = tuple(self._to_view(state) for state in states)
         instant_fps = 1.0 / max(elapsed_seconds, 1e-6)
         with self._lock:
-            self._latest_jpeg = jpeg
+            self._overlay_boxes = boxes
+            self._overlay_insets = angled
             self._zoom_jpegs = zoom_jpegs
             self._track_views = views
             self._frame_size = (frame.shape[1], frame.shape[0])

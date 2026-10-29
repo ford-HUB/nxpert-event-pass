@@ -656,6 +656,22 @@ export interface StubIdsResult {
   affected: number;
 }
 
+// Composed event invitation (To / CC may hold "@n-pax" = every system user).
+export interface InvitationMessageRequest {
+  to: string[];
+  cc: string[];
+  subject: string;
+  bodyHtml: string;
+}
+
+export interface InvitationMessageResult {
+  sent: number;
+  queued: number; // saved to the server outbox because SMTP is off or failed
+  recipientCount: number;
+  registerUrl: string;
+  message: string;
+}
+
 export interface ContactDto {
   id: number;
   fullName: string;

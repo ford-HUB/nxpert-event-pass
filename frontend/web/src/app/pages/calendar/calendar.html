@@ -1,0 +1,123 @@
+<div class="cal-page">
+  <div class="cal-header">
+    <div class="page-title">
+      <mat-icon color="primary">calendar_month</mat-icon>
+      <div>
+        <h1>Calendar</h1>
+        <p class="cal-subtitle">Event dates in Philippine time · new events appear automatically</p>
+      </div>
+    </div>
+    @if (auth.isAdmin()) {
+      <a class="ev-btn solid" routerLink="/admin/events/new"><mat-icon>add</mat-icon> New event</a>
+    }
+  </div>
+
+  <section class="cal-toolbar">
+    <div class="cal-nav">
+      <button type="button" class="ev-btn" (click)="goToday()">Today</button>
+      <button mat-icon-button (click)="move(-1)" aria-label="Previous period"><mat-icon>chevron_left</mat-icon></button>
+      <button mat-icon-button (click)="move(1)" aria-label="Next period"><mat-icon>chevron_right</mat-icon></button>
+      <h2>{{ anchor() | date: 'MMMM yyyy' : 'UTC' }}</h2>
+    </div>
+    <div class="cal-controls">
+      <input type="month" class="cal-month" aria-label="Go to month"
+             [ngModel]="key(anchor()).slice(0, 7)" (ngModelChange)="jump($event)" />
+      <mat-button-toggle-group class="cal-view" [value]="view()" (change)="setView($event.value)" aria-label="Calendar view">
+        <mat-button-toggle value="month">Month</mat-button-toggle>
+        <mat-button-toggle value="week">Week</mat-button-toggle>
+      </mat-button-toggle-group>
+      <button mat-icon-button (click)="load()" aria-label="Refresh calendar" matTooltip="Refresh">
+        @if (loading()) { <mat-spinner diameter="20" /> } @else { <mat-icon>refresh</mat-icon> }
+      </button>
+    </div>
+  </section>
+
+  @if (error()) {
+    <p class="cal-error" role="alert">
+      <mat-icon>error_outline</mat-icon> Could not refresh the calendar.
+      <button type="button" class="ev-btn" (click)="load()">Retry</button>
+    </p>
+  }
+
+  <div class="cal-layout">
+    <section class="cal-shell" [attr.aria-busy]="loading()">
+      @if (view() === 'month') {
+        <div class="month-grid">
+          @for (name of weekdays; track name) { <div class="weekday">{{ name }}</div> }
+          @for (day of days(); track key(day)) {
+            @let list = dayEvents(events(), day);
+            <div class="month-day" [class.outside]="day.getUTCMonth() !== anchor().getUTCMonth()"
+                 [class.selected]="key(day) === key(selected())">
+              <button type="button" class="day-number" [class.today]="key(day) === key(today())"
+                      (click)="selected.set(day)" [attr.aria-label]="day | date: 'fullDate' : 'UTC'">{{ day.getUTCDate() }}</button>
+              @for (event of list.slice(0, monthPreview); track event.id) {
+                <a class="appointment" [routerLink]="eventLink(event)" [class.registered]="event.isRegistered"
+                   [title]="event.title + ' · ' + event.venue">
+                  <span class="appt-time">{{ date(event.startsAt) | date: 'h:mm a' : 'UTC' }}</span> {{ event.title }}
+                </a>
+              }
+              @if (list.length > monthPreview) {
+                <button type="button" class="more" (click)="selected.set(day)">+{{ list.length - monthPreview }} more</button>
+              }
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="week-scroll" #weekScroll>
+          <div class="week-inner">
+            <div class="week-head">
+              <span></span>
+              @for (day of days(); track key(day)) {
+                <button type="button" (click)="selected.set(day)" [class.today]="key(day) === key(today())"
+                        [class.selected]="key(day) === key(selected())">{{ day | date: 'EEE d' : 'UTC' }}</button>
+              }
+            </div>
+            <div class="week-body">
+              <div class="hours">
+                @for (hour of hours; track hour) { <span>{{ hourLabel(hour) }}</span> }
+              </div>
+              @for (day of days(); track key(day)) {
+                <div class="week-day">
+                  @for (block of weekBlocks(events(), day); track block.event.id) {
+                    <a class="week-appointment" [class.registered]="block.event.isRegistered"
+                       [routerLink]="eventLink(block.event)" [style.top.px]="block.top" [style.height.px]="block.height"
+                       [style.left.%]="(block.column * 100) / block.columns" [style.width.%]="100 / block.columns"
+                       [title]="block.event.title">
+                      <strong>{{ block.event.title }}</strong>
+                      <span>{{ date(block.event.startsAt) | date: 'h:mm a' : 'UTC' }}–{{ date(block.event.endsAt) | date: 'h:mm a' : 'UTC' }}</span>
+                      <span>{{ block.event.venue }}</span>
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </section>
+
+    <aside class="cal-agenda" aria-live="polite">
+      <h3>{{ selected() | date: 'EEEE, MMMM d' : 'UTC' }}</h3>
+      @for (event of selectedEvents(); track event.id) {
+        @let tag = tagFor(event);
+        <a class="agenda-event" [routerLink]="eventLink(event)">
+          <mat-icon class="agenda-icon">{{ event.format === 'Online' ? 'videocam' : 'event' }}</mat-icon>
+          <div class="agenda-text">
+            <strong>{{ event.title }}</strong>
+            <span class="agenda-meta">
+              {{ date(event.startsAt) | date: 'MMM d, h:mm a' : 'UTC' }} – {{ date(event.endsAt) | date: 'MMM d, h:mm a' : 'UTC' }}
+            </span>
+            @if (event.venue) { <span class="agenda-meta">{{ event.venue }}</span> }
+            <span [class]="'status-pill ' + tag.tone">{{ tag.label }}</span>
+          </div>
+        </a>
+      } @empty {
+        <p class="muted">No events on this day.</p>
+      }
+      <div class="cal-legend">
+        <span><i class="dot"></i> Event</span>
+        <span><i class="dot registered"></i> Registered</span>
+      </div>
+    </aside>
+  </div>
+</div>

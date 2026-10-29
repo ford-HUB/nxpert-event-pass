@@ -1,93 +1,253 @@
-<div class="toolbar-row">
-  <div class="page-title">
-    <mat-icon color="primary">event</mat-icon>
-    <h1>Events</h1>
+<div class="el-page">
+  <div class="el-header">
+    <div class="page-title">
+      <mat-icon color="primary">event</mat-icon>
+      <div>
+        <h1>Events</h1>
+        @if (!loading()) {
+          <p class="el-subtitle">
+            {{ counts().all }} event{{ counts().all === 1 ? '' : 's' }}
+            @if (counts().live) { · <strong>{{ counts().live }} live now</strong> }
+            @if (counts().upcoming) { · {{ counts().upcoming }} upcoming }
+          </p>
+        }
+      </div>
+    </div>
+    <div class="el-header-actions">
+      <a class="ev-btn" routerLink="/calendar">
+        <mat-icon>calendar_month</mat-icon> Calendar
+      </a>
+      @if (auth.isAdmin()) {
+        <a class="ev-btn solid" routerLink="/admin/events/new">
+          <mat-icon>add</mat-icon> New event
+        </a>
+      }
+    </div>
   </div>
-  <span class="spacer"></span>
-  @if (auth.isAdmin()) {
-    <a class="ev-btn solid" routerLink="/admin/events/new">
-      <mat-icon>add</mat-icon> New event
-    </a>
+
+  @if (loading()) {
+    <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
+  } @else if (events().length === 0) {
+    <div class="empty-state">
+      <mat-icon>event_note</mat-icon>
+      <p>No events yet.</p>
+      @if (auth.isAdmin()) {
+        <a class="ev-btn solid" routerLink="/admin/events/new">Create your first event</a>
+      }
+    </div>
+  } @else {
+    <!-- Quick filters, search, sort and view -->
+    <section class="el-toolbar">
+      <div class="el-tabs" role="tablist" aria-label="Filter events">
+        @for (t of filterTabs; track t.id) {
+          <button type="button" role="tab" class="el-tab"
+                  [class.active]="filter() === t.id" [attr.aria-selected]="filter() === t.id"
+                  (click)="setFilter(t.id)">
+            <mat-icon>{{ t.icon }}</mat-icon>
+            {{ t.label }}
+            <span class="el-count">{{ counts()[t.id] }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="el-controls">
+        <mat-form-field appearance="outline" class="el-search" subscriptSizing="dynamic">
+          <mat-label>Search events</mat-label>
+          <mat-icon matPrefix>search</mat-icon>
+          <input matInput [ngModel]="search()" (ngModelChange)="onSearch($event)" placeholder="Title or venue" />
+          @if (search()) {
+            <button matIconSuffix mat-icon-button aria-label="Clear search" (click)="onSearch('')">
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="el-sort" subscriptSizing="dynamic">
+          <mat-label>Sort by</mat-label>
+          <mat-select [ngModel]="sort()" (ngModelChange)="onSort($event)">
+            <mat-option value="relevance">Live &amp; upcoming first</mat-option>
+            <mat-option value="newest">Date — newest first</mat-option>
+            <mat-option value="oldest">Date — oldest first</mat-option>
+            <mat-option value="title">Title — A to Z</mat-option>
+            <mat-option value="registrations">Most registrations</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-button-toggle-group class="el-view" [value]="view()" (change)="setView($event.value)"
+                                 hideSingleSelectionIndicator aria-label="Layout">
+          <mat-button-toggle value="grid" matTooltip="Card view" aria-label="Card view">
+            <mat-icon>grid_view</mat-icon>
+          </mat-button-toggle>
+          <mat-button-toggle value="list" matTooltip="List view" aria-label="List view">
+            <mat-icon>view_list</mat-icon>
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+    </section>
+
+    @if (filtered().length === 0) {
+      <div class="empty-state">
+        <mat-icon>search_off</mat-icon>
+        <p>No events match your search or filter.</p>
+        <button type="button" class="ev-btn" (click)="clearFilters()">Clear filters</button>
+      </div>
+    } @else {
+      <p class="el-result muted">
+        Showing {{ pageIndex() * pageSize() + 1 }}–{{ pageIndex() * pageSize() + paged().length }}
+        of {{ filtered().length }}
+      </p>
+
+      @if (view() === 'grid') {
+        <div class="ev-grid el-grid">
+          @for (e of paged(); track e.id) {
+            <div class="ev-card is-link" role="link" tabindex="0" [routerLink]="['/admin/events', e.id]"
+                 [attr.aria-label]="'Open ' + e.title" (keydown.enter)="open(e, $event)">
+              <div class="ev-body">
+                <div class="ev-head">
+                  <span class="ev-date">
+                    <span class="m">{{ e.startsAt | date: 'MMM' }}</span>
+                    <span class="d">{{ e.startsAt | date: 'd' }}</span>
+                  </span>
+                  <div class="ev-heading">
+                    <h2 class="ev-name" [title]="e.title">{{ e.title }}</h2>
+                    <div class="ev-tags">
+                      <ng-container *ngTemplateOutlet="tags; context: { $implicit: e }" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ev-meta">
+                  <p class="ev-line"><mat-icon>schedule</mat-icon>
+                    <span>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</span></p>
+                  @if (e.format === 'Online') {
+                    <p class="ev-line"><mat-icon>videocam</mat-icon> <span>Online meeting</span></p>
+                  } @else {
+                    <p class="ev-line"><mat-icon>place</mat-icon>
+                      <span [title]="e.venue">{{ e.venue }}@if (e.format === 'Hybrid') { · also online }</span></p>
+                  }
+                </div>
+
+                <div class="ev-stats">
+                  <div class="ev-stat">
+                    <span class="num">{{ e.registeredCount }}@if (e.capacity) {<span class="cap"> / {{ e.capacity }}</span>}</span>
+                    <span class="lbl">Registered</span>
+                    @if (e.capacity) {
+                      <div class="ev-bar"><span [style.width.%]="fill(e.registeredCount, e.capacity)"></span></div>
+                    }
+                  </div>
+                  <div class="ev-stat">
+                    <span class="num">{{ e.checkedInCount }}</span>
+                    <span class="lbl">Checked in</span>
+                    @if (e.registeredCount) {
+                      <div class="ev-bar"><span [style.width.%]="fill(e.checkedInCount, e.registeredCount)"></span></div>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div class="ev-foot">
+                @if (auth.isAdmin()) {
+                  <button type="button" class="ev-btn solid" (click)="startScanning(e, $event)"
+                          matTooltip="Open the check-in scanner for this event">
+                    <mat-icon>qr_code_scanner</mat-icon> Start check-in
+                  </button>
+                }
+                <span class="ev-go" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="el-list" role="table" aria-label="Events">
+          <div class="el-row el-row-head" role="row">
+            <span role="columnheader">Event</span>
+            <span role="columnheader">Date &amp; time</span>
+            <span role="columnheader">Registered</span>
+            <span role="columnheader">Checked in</span>
+            <span role="columnheader" class="sr-only">Actions</span>
+          </div>
+          @for (e of paged(); track e.id) {
+            <div class="el-row" role="row" tabindex="0" [routerLink]="['/admin/events', e.id]"
+                 [attr.aria-label]="'Open ' + e.title" (keydown.enter)="open(e, $event)">
+              <div class="el-event" role="cell">
+                <span class="ev-date el-date">
+                  <span class="m">{{ e.startsAt | date: 'MMM' }}</span>
+                  <span class="d">{{ e.startsAt | date: 'd' }}</span>
+                </span>
+                <div class="el-event-text">
+                  <span class="el-title" [title]="e.title">{{ e.title }}</span>
+                  <span class="el-venue">
+                    <mat-icon>{{ e.format === 'Online' ? 'videocam' : 'place' }}</mat-icon>
+                    {{ e.format === 'Online' ? 'Online meeting' : e.venue }}@if (e.format === 'Hybrid') { · also online }
+                  </span>
+                  <div class="ev-tags">
+                    <ng-container *ngTemplateOutlet="tags; context: { $implicit: e }" />
+                  </div>
+                </div>
+              </div>
+              <div class="el-when" role="cell">
+                <span>{{ e.startsAt | date: 'EEE, MMM d y' }}</span>
+                <span class="muted">{{ e.startsAt | date: 'h:mm a' }} – {{ e.endsAt | date: 'h:mm a' }}</span>
+              </div>
+              <div class="el-metric" role="cell">
+                <span class="el-num">{{ e.registeredCount }}@if (e.capacity) {<span class="cap"> / {{ e.capacity }}</span>}</span>
+                @if (e.capacity) {
+                  <div class="ev-bar"><span [style.width.%]="fill(e.registeredCount, e.capacity)"></span></div>
+                }
+                <span class="el-metric-label">Registered</span>
+              </div>
+              <div class="el-metric" role="cell">
+                <span class="el-num">{{ e.checkedInCount }}</span>
+                @if (e.registeredCount) {
+                  <div class="ev-bar"><span [style.width.%]="fill(e.checkedInCount, e.registeredCount)"></span></div>
+                }
+                <span class="el-metric-label">Checked in</span>
+              </div>
+              <div class="el-actions" role="cell">
+                @if (auth.isAdmin()) {
+                  <button type="button" class="ev-btn solid" (click)="startScanning(e, $event)"
+                          matTooltip="Open the check-in scanner for this event">
+                    <mat-icon>qr_code_scanner</mat-icon> <span class="el-btn-text">Check-in</span>
+                  </button>
+                }
+                <span class="ev-go" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (filtered().length > pageSizeOptions[0]) {
+        <mat-paginator class="el-paginator"
+          [length]="filtered().length"
+          [pageSize]="pageSize()"
+          [pageIndex]="pageIndex()"
+          [pageSizeOptions]="pageSizeOptions"
+          (page)="onPage($event)"
+          aria-label="Select page of events">
+        </mat-paginator>
+      }
+    }
   }
 </div>
 
-@if (loading()) {
-  <div class="empty-state"><mat-spinner diameter="40"></mat-spinner></div>
-} @else if (events().length === 0) {
-  <div class="empty-state">
-    <mat-icon>event_note</mat-icon>
-    <p>No events yet.</p>
-    @if (auth.isAdmin()) {
-      <a class="ev-btn solid" routerLink="/admin/events/new">Create your first event</a>
-    }
-  </div>
-} @else {
-  <div class="ev-grid">
-    @for (e of events(); track e.id) {
-      <div class="ev-card is-link" role="link" tabindex="0" [routerLink]="['/admin/events', e.id]"
-           [attr.aria-label]="'Open ' + e.title" (keydown.enter)="open(e, $event)">
-        <div class="ev-body">
-          <div class="ev-head">
-            <span class="ev-date">
-              <span class="m">{{ e.startsAt | date: 'MMM' }}</span>
-              <span class="d">{{ e.startsAt | date: 'd' }}</span>
-            </span>
-            <div class="ev-heading">
-              <h2 class="ev-name">{{ e.title }}</h2>
-              <div class="ev-tags">
-                @if (e.status === 'Closed') {
-                  <span class="ev-tag bad"><mat-icon>lock</mat-icon> Closed</span>
-                } @else if (e.isFull) {
-                  <span class="ev-tag warn"><mat-icon>groups</mat-icon> Full</span>
-                } @else {
-                  <span class="ev-tag ok"><mat-icon>how_to_reg</mat-icon> Open</span>
-                }
-                @if (e.format === 'Online' || e.format === 'Hybrid') {
-                  <span class="ev-tag brand"><mat-icon>videocam</mat-icon> {{ e.format }}</span>
-                }
-              </div>
-            </div>
-          </div>
-
-          <div class="ev-meta">
-            <p class="ev-line"><mat-icon>schedule</mat-icon>
-              <span>{{ e.startsAt | date: 'EEE, MMM d y, h:mm a' }}</span></p>
-            @if (e.format === 'Online') {
-              <p class="ev-line"><mat-icon>videocam</mat-icon> <span>Online meeting</span></p>
-            } @else {
-              <p class="ev-line"><mat-icon>place</mat-icon>
-                <span>{{ e.venue }}@if (e.format === 'Hybrid') { · also online }</span></p>
-            }
-          </div>
-
-          <div class="ev-stats">
-            <div class="ev-stat">
-              <span class="num">{{ e.registeredCount }}@if (e.capacity) {<span class="cap"> / {{ e.capacity }}</span>}</span>
-              <span class="lbl">Registered</span>
-              @if (e.capacity) {
-                <div class="ev-bar"><span [style.width.%]="fill(e.registeredCount, e.capacity)"></span></div>
-              }
-            </div>
-            <div class="ev-stat">
-              <span class="num">{{ e.checkedInCount }}</span>
-              <span class="lbl">Checked in</span>
-              @if (e.registeredCount) {
-                <div class="ev-bar"><span [style.width.%]="fill(e.checkedInCount, e.registeredCount)"></span></div>
-              }
-            </div>
-          </div>
-        </div>
-
-        <div class="ev-foot">
-          @if (auth.isAdmin()) {
-            <button type="button" class="ev-btn solid" (click)="startScanning(e, $event)"
-                    matTooltip="Open the check-in scanner for this event">
-              <mat-icon>qr_code_scanner</mat-icon> Start check-in
-            </button>
-          }
-          <span class="ev-go" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
-        </div>
-      </div>
-    }
-  </div>
-}
+<!-- Status chips shared by the card and list views -->
+<ng-template #tags let-e>
+  @if (phase(e) === 'live') {
+    <span class="ev-tag live"><span class="el-dot"></span> Live now</span>
+  }
+  @if (e.status === 'Draft') {
+    <span class="ev-tag"><mat-icon>edit_note</mat-icon> Draft</span>
+  } @else if (e.status === 'Closed') {
+    <span class="ev-tag bad"><mat-icon>lock</mat-icon> Closed</span>
+  } @else if (e.isFull) {
+    <span class="ev-tag warn"><mat-icon>groups</mat-icon> Full</span>
+  } @else if (phase(e) === 'past') {
+    <span class="ev-tag"><mat-icon>history</mat-icon> Ended</span>
+  } @else {
+    <span class="ev-tag ok"><mat-icon>how_to_reg</mat-icon> Open</span>
+  }
+  @if (e.format === 'Online' || e.format === 'Hybrid') {
+    <span class="ev-tag brand"><mat-icon>videocam</mat-icon> {{ e.format }}</span>
+  }
+</ng-template>

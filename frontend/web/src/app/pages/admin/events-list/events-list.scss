@@ -1,0 +1,291 @@
+// Admin Events list: header, filter/search toolbar, card grid or compact list, pager.
+// Card look (.ev-card, .ev-tag, .ev-btn, .ev-bar …) is shared and lives in styles.scss.
+
+$hairline-teal: 1px solid rgba(13, 148, 136, 0.14);
+
+.el-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+// ---- Header ----
+.el-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .page-title { margin: 0; }
+}
+
+.el-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.el-subtitle {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--mat-sys-on-surface-variant);
+
+  strong { color: #15803d; }
+}
+
+// ---- Toolbar ----
+.el-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border: $hairline-teal;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+}
+
+.el-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.el-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #f1f6f4;
+  color: #334155;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; line-height: 18px; }
+
+  &:hover { background: #e6f6f3; color: #0f766e; }
+  &:focus-visible { outline: 3px solid rgba(13, 148, 136, 0.35); outline-offset: 2px; }
+
+  &.active {
+    background: var(--brand-grad);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
+
+    .el-count { background: rgba(255, 255, 255, 0.25); color: #fff; }
+  }
+}
+
+.el-count {
+  min-width: 22px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f766e;
+  font-size: 12px;
+  text-align: center;
+}
+
+.el-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.el-search { flex: 1 1 320px; min-width: 0; }
+.el-sort { flex: 0 1 240px; min-width: 200px; }
+
+.el-view {
+  flex: none;
+  border-radius: 12px !important;
+
+  mat-icon { vertical-align: middle; }
+}
+
+.el-result { margin: 0; font-size: 13px; }
+
+// ---- Card grid: denser on wide screens ----
+.el-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+
+.el-grid .ev-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// "Live now" chip with a pulsing dot.
+.ev-tag.live { background: #e8f7ee; color: #15803d; }
+
+.el-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5);
+  animation: el-pulse 1.8s ease-out infinite;
+}
+
+@keyframes el-pulse {
+  70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .el-dot { animation: none; }
+}
+
+// ---- Compact list ----
+.el-list {
+  border: $hairline-teal;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.el-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.6fr) minmax(150px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: background 0.12s ease;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #f8fcfa; }
+  &:hover .ev-go { opacity: 1; transform: translateX(2px); }
+  &:focus-visible { outline: 3px solid rgba(13, 148, 136, 0.35); outline-offset: -3px; }
+}
+
+.el-row-head {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: #f6faf8;
+  cursor: default;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #475569;
+
+  &:hover { background: #f6faf8; }
+}
+
+.el-event { display: flex; align-items: center; gap: 14px; min-width: 0; }
+
+.el-date { width: 48px; height: 52px; background: #ecf8f4; border-color: transparent; }
+.el-date .d { font-size: 19px; }
+
+.el-event-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.el-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.el-venue {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  mat-icon { flex: none; font-size: 16px; width: 16px; height: 16px; color: #0d9488; }
+}
+
+.el-when { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: #334155; }
+.el-when .muted { font-size: 12.5px; }
+
+.el-metric { display: flex; flex-direction: column; min-width: 0; }
+.el-metric .ev-bar { margin-top: 6px; }
+.el-metric-label { display: none; font-size: 12px; font-weight: 600; color: #64748b; }
+
+.el-num {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+
+  .cap { font-size: 13px; font-weight: 700; color: #94a3b8; }
+}
+
+.el-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.el-actions .ev-go { margin-left: 0; }
+
+.el-paginator {
+  border: $hairline-teal;
+  border-radius: 14px;
+  background: #fff !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+// ---- Responsive ----
+@media (max-width: 1100px) {
+  .el-row { grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr) minmax(90px, 0.6fr) minmax(90px, 0.6fr) auto; }
+  .el-btn-text { display: none; }
+  .el-actions .ev-btn { width: 38px; padding: 0; }
+}
+
+// Tablet / phone: each list row becomes a compact card.
+@media (max-width: 760px) {
+  .el-row-head { display: none; }
+  .el-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'event event'
+      'when when'
+      'reg chk'
+      'actions actions';
+    gap: 10px 14px;
+    padding: 14px;
+  }
+  .el-event { grid-area: event; }
+  .el-when { grid-area: when; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .el-metric:nth-of-type(3) { grid-area: reg; }
+  .el-metric:nth-of-type(4) { grid-area: chk; }
+  .el-metric-label { display: block; margin-top: 4px; }
+  .el-actions { grid-area: actions; justify-content: space-between; }
+  .el-btn-text { display: inline; }
+  .el-actions .ev-btn { width: auto; padding: 0 16px; }
+}
+
+@media (max-width: 600px) {
+  .el-toolbar { padding: 12px; }
+  .el-search, .el-sort { flex-basis: 100%; }
+  .el-controls { gap: 10px; }
+  .el-view { margin-left: auto; }
+}
+
+// Keep chip icons on the same centre line as their text.
+.ev-tag { line-height: 1.2; }
+.ev-tag mat-icon { flex: none; line-height: 15px; }

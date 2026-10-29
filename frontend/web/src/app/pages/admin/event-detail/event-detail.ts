@@ -1,5 +1,6 @@
 import { Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { catchError, from, map, mergeMap, of, toArray } from 'rxjs';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -16,7 +17,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialog } from '@angular/material/dialog';
 import { ApiService } from '../../../core/api.service';
@@ -29,6 +29,7 @@ import { AttendeeDto, ContactDto, EventDto, EventFeedbackSummary, MealBoardDto, 
 import { ImageViewerDialogComponent } from '../../../shared/image-viewer/image-viewer-dialog';
 import { KitClaimDialogComponent, KitClaimResult } from '../../../shared/kit-claim-dialog';
 import { ViberBroadcastDialogComponent } from '../../../shared/viber-broadcast-dialog';
+import { InvitationComposerComponent } from '../../../shared/invitation-composer/invitation-composer';
 
 @Component({
   selector: 'app-event-detail',
@@ -50,21 +51,11 @@ import { ViberBroadcastDialogComponent } from '../../../shared/viber-broadcast-d
     MatSelectModule,
     MatChipsModule,
     MatTooltipModule,
-    MatPaginatorModule,
     MatProgressSpinnerModule,
+    InvitationComposerComponent,
   ],
   templateUrl: './event-detail.html',
-  styles: [`
-    .attendee-delete:not(:disabled) { color: #f5222d; }
-    .delivery-badges { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
-    .delivery-badge, .session-badge { display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 9px; border-radius: 16px; font-size: 12px; font-weight: 600; }
-    .delivery-badge { background: #e7f0ff; color: #1769d2; }
-    .delivery-badge.viber { background: #f0eaff; color: #6841a5; }
-    .delivery-badge mat-icon { width: 14px; height: 14px; font-size: 14px; }
-    .session-badge { background: #d5fae4; color: #187c43; }
-    .session-checkin { display: block; margin: 4px 0 8px; font-size: 12px; color: var(--mat-sys-on-surface-variant); }
-  `],
+  styleUrl: './event-detail.scss',
 })
 export class EventDetailComponent implements OnInit {
   private api = inject(ApiService);
@@ -93,64 +84,70 @@ export class EventDetailComponent implements OnInit {
   contacts = signal<ContactDto[]>([]);
   attendees = signal<AttendeeDto[]>([]);
   feedback = signal<EventFeedbackSummary | null>(null);
-  selected = signal<Set<number>>(new Set());
-  extraEmails = '';
+  // The invitation composer is sending (drives the page's busy overlay).
   sending = signal(false);
 
-  // Attendance: bulk-confirm / manual check-in selection (independent of the invite picker's `selected`).
+  // Attendance: bulk-confirm / manual check-in selection.
   selectedAttendees = signal<Set<number>>(new Set());
   confirming = signal(false);
   checkingIn = signal(false);
   cancelling = signal(false);
-  deletingAttendees = signal<Set<number>>(new Set());
+  deleting = signal(false);
 
-  // Admin: soft-delete one attendee. Their pass stops working; the registration history is kept.
-  async deleteAttendee(attendee: AttendeeDto): Promise<void> {
-    if (!this.auth.isAdmin() || this.deletingAttendees().has(attendee.registrationId)) return;
-    this.deletingAttendees.update((ids) => new Set(ids).add(attendee.registrationId));
-    const clearBusy = () => this.deletingAttendees.update((ids) => {
-      const next = new Set(ids);
-      next.delete(attendee.registrationId);
-      return next;
-    });
+  // Admin: soft-delete the selected attendees. Their passes stop working; the registration history
+  // is kept. There is no bulk endpoint, so each row is deleted with its own request (4 at a time).
+  async deleteSelected(): Promise<void> {
+    const rows = this.selectedAttendeeRows();
+    if (!this.auth.isAdmin() || this.deleting() || rows.length === 0) return;
+    const who = rows.length === 1 ? rows[0].fullName : `${rows.length} attendees`;
     const confirmed = await this.confirmer.confirm({
-      title: 'Delete attendee?',
-      message: `Remove ${attendee.fullName} from this event? Their QR pass will stop working. The registration and attendance history will be retained.`,
-      confirmText: 'Delete attendee',
-      cancelText: 'Keep attendee',
+      title: rows.length === 1 ? 'Delete attendee?' : `Delete ${rows.length} attendees?`,
+      message: `Remove ${who} from this event? Their QR pass${rows.length === 1 ? '' : 'es'} will stop working. The registration and attendance history will be retained.`,
+      confirmText: rows.length === 1 ? 'Delete attendee' : `Delete ${rows.length}`,
+      cancelText: 'Keep',
       tone: 'error',
       icon: 'delete',
     });
-    if (!confirmed) { clearBusy(); return; }
+    if (!confirmed) return;
 
-    this.api.deleteAttendee(this.id, attendee.registrationId).subscribe({
-      next: () => {
-        clearBusy();
-        this.attendees.update((rows) => rows.filter((r) => r.registrationId !== attendee.registrationId));
-        for (const selection of [this.selectedAttendees, this.selectedKits, this.selectedMeals]) {
-          selection.update((ids) => {
-            const next = new Set(ids);
-            next.delete(attendee.registrationId);
-            return next;
-          });
-        }
-        this.toast.success('Attendee deleted. Registration history retained.');
+    this.deleting.set(true);
+    from(rows.map((r) => r.registrationId)).pipe(
+      mergeMap((id) => this.api.deleteAttendee(this.id, id).pipe(
+        map(() => ({ id, ok: true })),
+        catchError(() => of({ id, ok: false })),
+      ), 4),
+      toArray(),
+    ).subscribe((results) => {
+      this.deleting.set(false);
+      const deleted = new Set(results.filter((r) => r.ok).map((r) => r.id));
+      const failed = results.length - deleted.size;
+      if (deleted.size) {
+        this.attendees.update((list) => list.filter((r) => !deleted.has(r.registrationId)));
+        const prune = (s: Set<number>) => new Set([...s].filter((id) => !deleted.has(id)));
+        this.selectedAttendees.update(prune);
+        this.selectedKits.update(prune);
+        this.selectedMeals.update(prune);
+        this.toast.success(`Deleted ${deleted.size} attendee${deleted.size === 1 ? '' : 's'}. Registration history retained.`);
         this.reload();
-      },
-      error: (err) => {
-        clearBusy();
-        this.toast.error(err?.error?.message ?? 'Could not delete the attendee. Please try again.');
-      },
+      }
+      if (failed) this.toast.error(`Could not delete ${failed} attendee${failed === 1 ? '' : 's'}. Please try again.`);
     });
   }
 
-  showAttendeePass(attendee: AttendeeDto): void {
+  // Print QR: needs exactly one selected attendee; opens the pass and starts the print.
+  printSelectedPass(): void {
+    const rows = this.selectedAttendeeRows();
+    if (rows.length === 1) this.showAttendeePass(rows[0], true);
+  }
+
+  showAttendeePass(attendee: AttendeeDto, autoPrint = false): void {
     const event = this.event();
     if (!event) return;
     this.dialog.open(AttendeePassDialogComponent, {
-      data: { eventId: this.id, eventTitle: event.title, attendee },
+      data: { eventId: this.id, eventTitle: event.title, attendee, autoPrint },
       width: '440px',
       maxWidth: '95vw',
+      panelClass: 'pass-print-pane',
     });
   }
 
@@ -168,30 +165,6 @@ export class EventDetailComponent implements OnInit {
   mealRedeemFilter = signal<'all' | 'redeemed' | 'unredeemed'>('all');
   mealSort = signal<{ active: string; direction: 'asc' | 'desc' | '' }>({ active: '', direction: '' });
   mealRedeeming = signal(false);
-
-  // Contact picker: search + pagination
-  contactSearch = signal('');
-  pageIndex = signal(0);
-  pageSize = signal(5);
-
-  filteredContacts = computed(() => {
-    const q = this.contactSearch().trim().toLowerCase();
-    const list = this.contacts();
-    if (!q) return list;
-    return list.filter(
-      (c) =>
-        c.fullName.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        (c.organization ?? '').toLowerCase().includes(q),
-    );
-  });
-
-  pagedContacts = computed(() => {
-    const start = this.pageIndex() * this.pageSize();
-    return this.filteredContacts().slice(start, start + this.pageSize());
-  });
-
-  selectedCount = computed(() => this.selected().size);
 
   // Filters for the attendance list: sub-event, status, organization, and free-text search.
   sessionFilter = signal<number | 'all'>('all');
@@ -279,9 +252,14 @@ export class EventDetailComponent implements OnInit {
     this.displayedAttendees().filter((a) => !a.confirmedAt && !a.checkedInAt),
   );
   pendingCount = computed(() => this.pendingAttendees().length);
-  // Rows eligible for selection (anything not yet checked in — can be confirmed and/or checked in).
+  // Rows eligible for check-in (anything not yet checked in — can be confirmed and/or checked in).
   selectableAttendees = computed(() => this.displayedAttendees().filter((a) => !a.checkedInAt));
   selectedAttendeeCount = computed(() => this.selectedAttendees().size);
+  // Every row can be selected (for Print QR / Delete); bulk actions only act on the eligible ones.
+  selectedAttendeeRows = computed(() => {
+    const sel = this.selectedAttendees();
+    return this.displayedAttendees().filter((a) => sel.has(a.registrationId));
+  });
   // Of the current selection, how many are eligible for a manual check-in / a confirm.
   selectedCheckInCount = computed(() => {
     const sel = this.selectedAttendees();
@@ -291,8 +269,8 @@ export class EventDetailComponent implements OnInit {
     const sel = this.selectedAttendees();
     return this.pendingAttendees().filter((a) => sel.has(a.registrationId)).length;
   });
-  allSelectableSelected = computed(() => {
-    const items = this.selectableAttendees();
+  allAttendeesSelected = computed(() => {
+    const items = this.displayedAttendees();
     const sel = this.selectedAttendees();
     return items.length > 0 && items.every((a) => sel.has(a.registrationId));
   });
@@ -309,8 +287,7 @@ export class EventDetailComponent implements OnInit {
   displayedColumns = computed(() => {
     const cols = [...this.baseColumns];
     cols.splice(cols.indexOf('email') + 1, 0, 'passVia', 'session');
-    return [...cols, ...this.formFields().map((f) => 'ff_' + f.key), 'pass',
-      ...(this.auth.isAdmin() ? ['delete'] : [])];
+    return [...cols, ...this.formFields().map((f) => 'ff_' + f.key)];
   });
   colId(key: string): string {
     return 'ff_' + key;
@@ -319,6 +296,17 @@ export class EventDetailComponent implements OnInit {
   publicUrl = computed(() => {
     const e = this.event();
     return e ? `${location.origin}/e/${e.publicSlug}` : '';
+  });
+
+  // Header summary tiles (independent of the Attendance filters).
+  totalPendingCount = computed(() => this.attendees().filter((a) => !a.confirmedAt && !a.checkedInAt).length);
+  capacityPct = computed(() => {
+    const e = this.event();
+    return e?.capacity ? Math.min(100, Math.round((e.registeredCount / e.capacity) * 100)) : 0;
+  });
+  checkInPct = computed(() => {
+    const e = this.event();
+    return e?.registeredCount ? Math.round((e.checkedInCount / e.registeredCount) * 100) : 0;
   });
 
   ngOnInit(): void {
@@ -332,7 +320,7 @@ export class EventDetailComponent implements OnInit {
       .subscribe((n) => {
         if (n.eventId === this.id) this.applyAttendeeChanges(n.attendees, n.removedIds);
       });
-    // Contacts (invite picker) are admin-only; confirmers only need the attendance list.
+    // The invitation composer's user directory is admin-only; confirmers only need the attendance list.
     if (this.auth.isAdmin()) {
       this.api.listContacts().subscribe((c) => this.contacts.set(c));
     }
@@ -396,16 +384,6 @@ export class EventDetailComponent implements OnInit {
     return Array.from({ length: n }, (_, i) => i + 1);
   }
 
-  toggle(id: number): void {
-    const next = new Set(this.selected());
-    next.has(id) ? next.delete(id) : next.add(id);
-    this.selected.set(next);
-  }
-
-  isSelected(id: number): boolean {
-    return this.selected().has(id);
-  }
-
   // ---- Attendance bulk-confirm selection ----
   toggleAttendee(id: number): void {
     const next = new Set(this.selectedAttendees());
@@ -417,11 +395,15 @@ export class EventDetailComponent implements OnInit {
     return this.selectedAttendees().has(id);
   }
 
+  clearAttendeeSelection(): void {
+    this.selectedAttendees.set(new Set());
+  }
+
   toggleAllSelectable(): void {
-    if (this.allSelectableSelected()) {
+    if (this.allAttendeesSelected()) {
       this.selectedAttendees.set(new Set());
     } else {
-      this.selectedAttendees.set(new Set(this.selectableAttendees().map((a) => a.registrationId)));
+      this.selectedAttendees.set(new Set(this.displayedAttendees().map((a) => a.registrationId)));
     }
   }
 
@@ -493,7 +475,9 @@ export class EventDetailComponent implements OnInit {
 
   // Manually check in the selected registrations (marks them attended with method "Manual").
   checkInSelected(): void {
-    const ids = [...this.selectedAttendees()];
+    // Already-checked-in rows may be selected (for Print QR / Delete); skip them here.
+    const sel = this.selectedAttendees();
+    const ids = this.selectableAttendees().filter((a) => sel.has(a.registrationId)).map((a) => a.registrationId);
     if (ids.length === 0) {
       this.toast.warning('Select at least one registration to check in.');
       return;
@@ -1125,61 +1109,6 @@ export class EventDetailComponent implements OnInit {
   }
 
   readonly stubColumns = ['sselect', 'name', 'stub', 'denom', 'control', 'sstatus', 'merchant'];
-
-  onSearch(value: string): void {
-    this.contactSearch.set(value);
-    this.pageIndex.set(0); // jump back to the first page of results
-  }
-
-  onPage(e: PageEvent): void {
-    this.pageIndex.set(e.pageIndex);
-    this.pageSize.set(e.pageSize);
-  }
-
-  sendInvites(): void {
-    const emails = new Set<string>();
-    for (const c of this.contacts()) {
-      if (this.selected().has(c.id)) emails.add(c.email);
-    }
-
-    // Validate the free-text extras: collect valid ones and flag anything malformed.
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const invalid: string[] = [];
-    for (const raw of this.extraEmails.split(/[\s,;]+/)) {
-      const e = raw.trim().toLowerCase();
-      if (!e) continue;
-      if (emailRe.test(e)) emails.add(e);
-      else invalid.push(e);
-    }
-
-    if (invalid.length > 0) {
-      this.toast.warning(`Invalid email(s): ${invalid.join(', ')}`);
-      return;
-    }
-    if (emails.size === 0) {
-      this.toast.warning('Pick at least one contact or enter an email.');
-      return;
-    }
-    if (emails.size > 200) {
-      this.toast.warning('Too many recipients — send to at most 200 at a time.');
-      return;
-    }
-
-    this.sending.set(true);
-    this.api.sendInvites(this.id, [...emails]).subscribe({
-      next: (res) => {
-        this.sending.set(false);
-        this.selected.set(new Set());
-        this.extraEmails = '';
-        this.toast.success(`Sent ${res.sent} invitation(s).`);
-        this.reload();
-      },
-      error: () => {
-        this.sending.set(false);
-        this.toast.error('Could not send invitations.');
-      },
-    });
-  }
 
   copyLink(): void {
     navigator.clipboard?.writeText(this.publicUrl());

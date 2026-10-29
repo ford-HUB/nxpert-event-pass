@@ -13,12 +13,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatDialog } from '@angular/material/dialog';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RealtimeService } from '../../core/realtime.service';
 import { ApiService } from '../../core/api.service';
 import { FaceSample, FaceService } from '../../core/face.service';
 import { OfflineService } from '../../core/offline.service';
 import { BeepService } from '../../core/beep.service';
+import { openScreenDisplay } from './screen-display-dialog';
 import {
   CheckInOptions,
   CheckInResult,
@@ -57,6 +59,8 @@ const CAMERA_FPS = 30;
 // After a result clears, the same pass/face is ignored for a short, fixed time so it doesn't
 // re-fire the instant the banner disappears. Errors come back quickly; successes wait longer.
 const ERROR_COOLDOWN_MS = 1000;
+// How long a scan result stays up in the pop-up before the scanner is ready again.
+const RESULT_POPUP_MS = 3000;
 const SUCCESS_COOLDOWN_MS = 4000;
 // A camera held by another app (e.g. the face engine while the TV is open) is retried this often.
 const CAMERA_RETRY_MS = 3000;
@@ -167,6 +171,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   private face = inject(FaceService);
   protected offline = inject(OfflineService);
   protected beeper = inject(BeepService);
+  private dialog = inject(MatDialog);
   private realtime = inject(RealtimeService);
   private scanner: Html5Qrcode | null = null;
   private readonly regionId = 'qr-reader';
@@ -257,6 +262,10 @@ export class ScannerComponent implements OnInit, OnDestroy {
   private cameraPermission: PermissionStatus | null = null;
   private cameraRetryTimer: ReturnType<typeof setTimeout> | null = null;
   banner = signal<BannerState>('idle');
+  // Bumped on every result so the pop-up re-renders (and bounces again) even when a forced
+  // barcode scan replaces a result that is still showing.
+  resultSeq = signal(0);
+  readonly popupMs = RESULT_POPUP_MS;
   resultName = signal<string | null>(null);
   resultEvent = signal<string | null>(null);
   resultMessage = signal<string | null>(null);
@@ -516,6 +525,11 @@ export class ScannerComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Screen Display: the event banner, large, in a framed dialog (scanning keeps running).
+  openScreenDisplay(): void {
+    openScreenDisplay(this.dialog, this.eventBanner(), this.eventTitle());
+  }
+
   // Resize the camera preview. html5-qrcode measures its scan region only when it starts, so a
   // running QR camera is restarted once the new layout has settled.
   // Face mode reads the <video> directly and needs no restart.
@@ -722,7 +736,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   // A face was seen but doesn't match anyone in the user master → "Face not registered".
   private showNoMatch(): void {
     this.setResult('nomatch', { message: 'This face is not registered in the system.' });
-    this.scheduleResume(2500);
+    this.scheduleResume();
   }
 
   // Face matched a member in the user master, but they aren't registered for THIS event.
@@ -732,7 +746,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
       event: this.eventTitle() || null,
       message: message || 'This member is not registered for this event.',
     });
-    this.scheduleResume(3500);
+    this.scheduleResume();
   }
 
   stopFace(): void {
@@ -944,7 +958,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
           : res.message ?? (res.status === 'invalid' ? 'Not a valid meal stub.' : null),
     });
     if (res.status === 'valid') this.mealsRedeemedCount.update((c) => c + 1);
-    this.scheduleResume(2800);
+    this.scheduleResume();
   }
 
   // Check in a face-recognized member. Online uses the server; offline resolves the member's
@@ -1069,9 +1083,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
     if (res.status === 'valid') this.requestAttendanceRefresh();
     if (this.verifyOnly() && (res.status === 'verified' || res.status === 'already'))
       this.verifiedCount.update((c) => c + 1);
-    // Off-window / unconfirmed scans linger a touch longer so the operator reads the reason.
-    const longer = res.status === 'notstarted' || res.status === 'ended' || res.status === 'unconfirmed';
-    this.scheduleResume(longer ? 4000 : 2500);
+    this.scheduleResume();
   }
 
   // Show a result. Every field is reset first, so nothing from the previous scan (photo,
@@ -1100,6 +1112,12 @@ export class ScannerComponent implements OnInit, OnDestroy {
     this.resultPhoto.set(f.photo ?? null);
     this.resultSession.set(f.session ?? null);
     this.banner.set(state);
+    if (state !== 'idle') this.resultSeq.update((n) => n + 1);
+  }
+
+  // Close the result pop-up early (click): same as its 3 s timer running out.
+  dismissResult(): void {
+    if (this.resumeTimer) this.scheduleResume(0);
   }
 
   // ---- Scan gating ----
@@ -1150,7 +1168,7 @@ export class ScannerComponent implements OnInit, OnDestroy {
   }
 
   // Clear the banner and allow the next scan after a short pause.
-  private scheduleResume(delayMs = 2500): void {
+  private scheduleResume(delayMs = RESULT_POPUP_MS): void {
     if (this.resumeTimer) clearTimeout(this.resumeTimer);
     const t = this.attempt;
     this.resumeTimer = setTimeout(() => {

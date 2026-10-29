@@ -1,42 +1,172 @@
-/* Event banner strip under the title. Fixed-height box on the brand backdrop with the image
-   contained, so a wide banner fills it and a square/portrait one centers with brand gutters —
-   never cropped or stretched. */
-.scan-banner {
-  height: 96px;
-  margin: 4px 0 16px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--brand-grad);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.scan-banner img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+/* Responsive strategy: the page reacts to the width it actually gets (the app shell caps it at
+   1120px), not the viewport. `scanner` = whole page, `scancol` = the controls column. */
+:host {
   display: block;
+  width: 100%;
+  container: scanner / inline-size;
 }
 
-/* Keep the strip short on small screens so the camera + result banner stay visible. */
-@media (max-width: 640px) {
-  .scan-banner {
-    height: 64px;
-    margin-bottom: 12px;
+/* Title row: the action buttons wrap under a long event title instead of squeezing it. */
+.scan-title {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.scan-title h1 {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Phones: keep the actions beside the title as icon-only buttons (each has an aria-label). */
+@container scanner (max-width: 560px) {
+  .scan-title {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .scan-title h1 {
+    flex: 1 1 0;
+    font-size: 20px;
+  }
+  .title-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .title-actions .btn-label {
+    display: none;
+  }
+  .title-actions .mat-mdc-button-base {
+    min-width: 40px;
+    padding: 0 10px;
+  }
+  .title-actions .mat-icon {
+    margin: 0;
   }
 }
 
-.scanner-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  align-items: start;
+@container scanner (max-width: 400px) {
+  .scan-title > mat-icon {
+    display: none;
+  }
 }
 
-@media (max-width: 800px) {
+/* ===== Layout =====
+   Wide: settings card on the left, camera card on the right. Stacked (phones, portrait tablets,
+   narrow windows): settings → camera. Scan results pop up over the page. */
+.scanner-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-areas: 'settings stage';
+  gap: 20px 24px;
+  align-items: stretch; // both cards share the taller one's height
+}
+
+.scanner-layout > * {
+  min-width: 0;
+}
+
+.scanner-col {
+  grid-area: settings;
+  container: scancol / inline-size;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-fill {
+  flex: 1 0 0;
+}
+
+.scan-stage {
+  grid-area: stage;
+}
+
+@container scanner (max-width: 839px) {
   .scanner-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'settings'
+      'stage';
+    gap: 16px;
+  }
+}
+
+/* Cards: same language as the rest of the app — white surface, teal hairline, soft shadow, and a
+   heading with a soft teal icon tile. */
+.scan-panel {
+  background: #fff;
+  border: 1px solid rgba(13, 148, 136, 0.14);
+  border-radius: 18px;
+  box-shadow: var(--card-shadow);
+  padding: 16px 18px 18px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.panel-icon {
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  font-size: 20px;
+  line-height: 20px;
+  background: #ecf8f4;
+  color: #0d9488;
+}
+
+.scanner-col .offline-bar {
+  margin-bottom: 0;
+}
+
+.auto-note {
+  margin: -4px 0 12px;
+}
+
+/* Wide layout: the camera fills its card, sized from the window height so the whole card fits on
+   screen. --stage-cam-h = window minus app header, page title, card heading,
+   padding and the scan-controls row. Large trades a little scrolling for a bigger preview. */
+@container scanner (min-width: 840px) {
+  .scan-stage {
+    --stage-cam-h: max(220px, calc(100vh - 330px));
+  }
+  .scanner-layout.cam-lg .scan-stage {
+    --stage-cam-h: max(300px, calc(100vh - 300px));
+  }
+  // Narrow the preview to its 4:3 width for that height, so it shrinks without cropping…
+  .scan-stage .cam-block {
+    max-width: calc(var(--stage-cam-h) * 4 / 3);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  // …and cap the height as a backstop for wider (16:9) cameras.
+  .scan-stage .cam-block .qr-reader,
+  :host ::ng-deep .scan-stage .cam-block #qr-reader video {
+    min-height: 0;
+    max-height: var(--stage-cam-h);
+    object-fit: cover;
   }
 }
 
@@ -56,7 +186,7 @@
 /* Mobile (stacked layout): keep the live camera preview compact so the result/response banner
    below it is fully visible without scrolling. object-fit: cover crops the shorter preview
    rather than squashing it — the full camera frame is still scanned underneath. */
-@media (max-width: 800px) {
+@container scanner (max-width: 839px) {
   .cam-block .qr-reader {
     min-height: 0;
     max-height: 34vh;
@@ -67,10 +197,6 @@
   :host ::ng-deep .cam-block #qr-reader video {
     max-height: 34vh !important;
     object-fit: cover;
-  }
-  .result-banner {
-    min-height: 200px;
-    padding: 24px 18px;
   }
 }
 
@@ -92,7 +218,50 @@
 
 .mode-toggle .mat-button-toggle {
   flex: 1 1 0;
+  min-width: 0;
   text-align: center;
+}
+
+/* Narrow controls column (small laptops, phones): drop the selected check mark (the selected
+   segment is still tinted and bold), tighten padding and shorten "Auto (QR + Face)". */
+@container scancol (max-width: 560px) {
+  :host ::ng-deep .mode-toggle {
+    .mat-button-toggle-checkbox-wrapper {
+      display: none;
+    }
+    .mat-button-toggle-checked .mat-button-toggle-button {
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .mat-button-toggle-checked {
+      font-weight: 700;
+    }
+    .mat-button-toggle-label-content {
+      padding: 0 6px;
+      font-size: 13px;
+    }
+    .mat-button-toggle-label-content mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+  .lbl-extra {
+    display: none;
+  }
+}
+
+/* Phone portrait: stack each input-source icon above its label so all four fit. */
+@container scancol (max-width: 420px) {
+  :host ::ng-deep .source-toggle .mat-button-toggle-label-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    line-height: 1.2;
+    font-size: 12px;
+  }
 }
 
 .barcode-block {
@@ -169,7 +338,7 @@
 }
 
 .result-banner {
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 40px 24px;
   text-align: center;
   color: #fff;
@@ -201,15 +370,6 @@
 .banner-sub {
   opacity: 0.9;
   margin: 0;
-}
-
-.banner-idle {
-  background: var(--mat-sys-surface-container-highest);
-  color: var(--mat-sys-on-surface);
-}
-
-.idle-icon {
-  opacity: 0.5;
 }
 
 .banner-valid {
@@ -292,24 +452,6 @@
 }
 
 /* ===== Camera preview size: Small / Medium (original) / Large ===== */
-.size-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 0 10px;
-}
-
-.size-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
-}
-
 .size-toggle {
   border-radius: 999px !important;
   overflow: hidden;
@@ -317,21 +459,21 @@
   font-size: 13px;
 }
 
-// Desktop / tablet (side-by-side layout).
-@media (min-width: 801px) {
+// Desktop / laptop (side-by-side layout).
+@container scanner (min-width: 840px) {
   // Small: a narrower preview, centred in its column.
   .cam-block.size-sm {
     width: 62%;
     margin: 0 auto;
   }
-  // Large: give the camera column more of the row so the preview really grows.
+  // Large: give the camera (right) column more of the row so the preview really grows.
   .scanner-layout.cam-lg {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   }
 }
 
-// Phones (stacked layout): the preview height scales instead (Medium = 34vh, the original).
-@media (max-width: 800px) {
+// Stacked layout: the preview height scales instead (Medium = 34vh, the original).
+@container scanner (max-width: 839px) {
   .cam-block.size-sm .qr-reader,
   :host ::ng-deep .cam-block.size-sm #qr-reader video {
     max-height: 24vh !important;
@@ -363,4 +505,107 @@
 .session-select {
   width: 100%;
   margin-bottom: 12px;
+}
+
+/* ===== Scan result pop-up =====
+   Fixed over the page (above the sticky app header, below Material overlays), bounces in, and a
+   bar along the bottom counts down the 3 s until the scanner is ready again. */
+.result-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.45);
+  animation: pop-fade 0.15s ease-out;
+  cursor: pointer;
+}
+
+.result-banner.result-pop {
+  position: relative;
+  overflow: hidden;
+  width: min(400px, 100%);
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  padding: 26px 22px 24px;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+  animation: pop-bounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.result-pop h2 {
+  margin: 8px 0 2px;
+  font-size: 24px;
+}
+
+.result-pop .banner-icon {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+}
+
+.result-pop .banner-name {
+  font-size: 19px;
+}
+
+.result-pop .banner-photo {
+  width: 88px;
+  height: 88px;
+}
+
+.pop-timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.6);
+  transform-origin: left center;
+  animation: pop-timer 3s linear forwards; // duration bound from RESULT_POPUP_MS
+}
+
+@keyframes pop-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pop-bounce {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  80% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+@keyframes pop-timer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@container scanner (max-width: 560px) {
+  .result-banner.result-pop {
+    padding: 22px 18px 20px;
+  }
+  .result-pop h2 {
+    font-size: 21px;
+  }
+  .result-pop .banner-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+  .result-pop .banner-name {
+    font-size: 17px;
+  }
+  .result-pop .banner-photo {
+    width: 76px;
+    height: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-banner.result-pop {
+    animation: pop-fade 0.15s ease-out;
+  }
 }

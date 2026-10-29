@@ -3,6 +3,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { API_BASE } from './config';
 import { SKIP_ERROR_TOAST } from './error.interceptor';
+import { CalendarEvent } from './calendar.util';
 import {
   AdminUserUpsert,
   AppSettingsDto,
@@ -11,6 +12,8 @@ import {
   AttendeeDto,
   EventAttendanceSummary,
   CheckInOptions,
+  InvitationMessageRequest,
+  InvitationMessageResult,
   CheckInResult,
   ClaimKitResult,
   ConfirmResult,
@@ -67,6 +70,12 @@ export class ApiService {
   }
   getEvent(id: number): Observable<EventDto> {
     return this.http.get<EventDto>(this.url(`/api/events/${id}`));
+  }
+  // Events overlapping [from, to) (yyyy-MM-dd, Philippine time, at most 93 days) for the calendar.
+  calendar(from: string, to: string): Observable<{ timeZone: string; events: CalendarEvent[] }> {
+    return this.http.get<{ timeZone: string; events: CalendarEvent[] }>(this.url('/api/calendar'), {
+      params: { from, to },
+    });
   }
   getPublicEvent(slug: string): Observable<EventDto> {
     return this.http.get<EventDto>(this.url(`/api/events/public/${slug}`));
@@ -247,6 +256,12 @@ export class ApiService {
   // ---- Contacts + invitations ----
   listContacts(): Observable<ContactDto[]> {
     return this.http.get<ContactDto[]>(this.url('/api/contacts'));
+  }
+  // Composed invitation with To / CC and inline images; errors are explained by the composer.
+  sendInvitationMessage(eventId: number, message: InvitationMessageRequest): Observable<InvitationMessageResult> {
+    return this.http.post<InvitationMessageResult>(this.url(`/api/events/${eventId}/invitations/compose`), message, {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
   }
   sendInvites(eventId: number, emails: string[]): Observable<{ sent: number; registerUrl: string }> {
     return this.http.post<{ sent: number; registerUrl: string }>(
