@@ -58,6 +58,29 @@ const CAMERA_FPS = 30;
 // re-fire the instant the banner disappears. Errors come back quickly; successes wait longer.
 const ERROR_COOLDOWN_MS = 1000;
 const SUCCESS_COOLDOWN_MS = 4000;
+// A camera held by another app (e.g. the face engine while the TV is open) is retried this often.
+const CAMERA_RETRY_MS = 3000;
+
+// Why a camera failed to open. Errors are a DOMException from getUserMedia or html5-qrcode's
+// "Error getting userMedia, error = <name>: <message>" string.
+type CameraFailure = 'denied' | 'busy' | 'missing' | 'insecure' | 'other';
+
+function cameraFailure(err: unknown): CameraFailure {
+  if (!window.isSecureContext) return 'insecure';
+  const text = err instanceof DOMException ? err.name : String(err);
+  if (/NotAllowedError|PermissionDenied|SecurityError/.test(text)) return 'denied';
+  if (/NotReadableError|TrackStartError|AbortError/.test(text)) return 'busy';
+  if (/NotFoundError|DevicesNotFound|OverconstrainedError/.test(text)) return 'missing';
+  return 'other';
+}
+
+const CAMERA_FAILURE_MESSAGES: Record<Exclude<CameraFailure, 'other'>, string> = {
+  denied:
+    'Camera access is blocked. Allow the camera for this site (and in Windows Settings → Privacy → Camera) — it opens by itself once allowed.',
+  busy: 'The camera is in use by another app (TV mode, Teams, Zoom…). It opens by itself once it is free.',
+  missing: 'No camera found. Connect a camera, then retry.',
+  insecure: 'The camera needs HTTPS (or localhost). Open this page over HTTPS.',
+};
 
 // Which physical camera to open: "environment" = back, "user" = front (selfie).
 type CameraFacing = 'environment' | 'user';
@@ -231,6 +254,8 @@ export class ScannerComponent implements OnInit, OnDestroy {
   scanning = signal(false);
   starting = signal(false);
   cameraError = signal<string | null>(null);
+  private cameraPermission: PermissionStatus | null = null;
+  private cameraRetryTimer: ReturnType<typeof setTimeout> | null = null;
   banner = signal<BannerState>('idle');
   resultName = signal<string | null>(null);
   resultEvent = signal<string | null>(null);
@@ -301,7 +326,39 @@ export class ScannerComponent implements OnInit, OnDestroy {
       if (this.offline.online() && this.offline.pending() > 0) void this.syncNow();
     }
     this.beeper.warmUp();
+    void this.watchCameraPermission();
     this.start();
+  }
+
+  // Reopen the camera by itself once the browser grants permission (no Retry click needed).
+  private async watchCameraPermission(): Promise<void> {
+    try {
+      this.cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      this.cameraPermission.onchange = () => {
+        if (this.cameraPermission?.state === 'granted') this.reopenCamera();
+      };
+    } catch {
+      /* Firefox can't query camera permission; Retry camera still works */
+    }
+  }
+
+  // Restart the current input's camera if it failed to open. A no-op once it is running.
+  private reopenCamera(): void {
+    if (this.countsDestroyed) return;
+    const mode = this.mode();
+    if ((mode === 'camera' || mode === 'auto') && this.cameraError() && !this.starting()) {
+      void this.start();
+    } else if (mode === 'face' && !this.faceReady() && !this.faceLoading() && this.faceError()) {
+      void this.startFace();
+    }
+  }
+
+  private scheduleCameraRetry(): void {
+    if (this.cameraRetryTimer || this.countsDestroyed) return;
+    this.cameraRetryTimer = setTimeout(() => {
+      this.cameraRetryTimer = null;
+      this.reopenCamera();
+    }, CAMERA_RETRY_MS);
   }
 
   private async loadBundle(): Promise<void> {
@@ -355,6 +412,8 @@ export class ScannerComponent implements OnInit, OnDestroy {
     if (this.countPollTimer) clearInterval(this.countPollTimer);
     if (this.resumeTimer) clearTimeout(this.resumeTimer);
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    if (this.cameraRetryTimer) clearTimeout(this.cameraRetryTimer);
+    if (this.cameraPermission) this.cameraPermission.onchange = null;
     this.stop();
     this.stopFace();
   }
@@ -384,9 +443,14 @@ export class ScannerComponent implements OnInit, OnDestroy {
       this.qrMirrored.set(this.runningFacing() !== 'environment');
       void this.detectCameras();
     } catch (err) {
+      const failure = cameraFailure(err);
       this.cameraError.set(
-        'Could not open the camera. Grant camera permission and use HTTPS (or localhost).',
+        failure === 'other'
+          ? 'Could not open the camera. Grant camera permission and use HTTPS (or localhost).'
+          : CAMERA_FAILURE_MESSAGES[failure],
       );
+      // Keep trying unless only the operator can fix it (blocked, no camera, no HTTPS).
+      if (failure === 'busy' || failure === 'other') this.scheduleCameraRetry();
     } finally {
       this.starting.set(false);
     }
@@ -600,11 +664,15 @@ export class ScannerComponent implements OnInit, OnDestroy {
         this.faceError.set('No registered faces yet — register a face in Users, or have guests add one at sign-up.');
       }
       this.faceTimer = setInterval(() => this.detectFace(), FACE_CHECK_INTERVAL_MS);
-    } catch {
+    } catch (err) {
       this.faceLoading.set(false);
+      const failure = cameraFailure(err);
       this.faceError.set(
-        'Could not start facial recognition. Grant camera permission and use HTTPS (or localhost).',
+        failure === 'other'
+          ? 'Could not start facial recognition. Grant camera permission and use HTTPS (or localhost).'
+          : CAMERA_FAILURE_MESSAGES[failure],
       );
+      if (failure === 'busy') this.scheduleCameraRetry();
     }
   }
 

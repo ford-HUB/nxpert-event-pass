@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { debounceTime, filter, firstValueFrom } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
+import { debounceTime, filter, firstValueFrom, timeout } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import {
   EngineCheckIn,
@@ -25,6 +25,8 @@ const QUEUE_SLOTS = 4;
 // The attendee list also refreshes on its own, to pick up QR and manual check-ins.
 const ATTENDEES_REFRESH_MS = 30 * 1000;
 const CAMERA_RETRY_MS = 3000;
+// Exit waits this long at most for the engine to release the webcam before leaving.
+const EXIT_RELEASE_TIMEOUT_MS = 8000;
 // The TV's scan mode is remembered per device.
 const SCAN_MODE_KEY = 'nxpass.tvScanMode';
 const SCAN_MODES: EngineScanMode[] = ['qr', 'face', 'auto'];
@@ -85,12 +87,12 @@ interface TvItem {
  */
 @Component({
   selector: 'app-face-tv',
-  imports: [RouterLink],
   templateUrl: './face-tv.html',
   styleUrl: './face-tv.scss',
 })
 export class FaceTvComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private api = inject(ApiService);
   private engine = inject(FaceEngineService);
   private realtime = inject(RealtimeService);
@@ -98,6 +100,7 @@ export class FaceTvComponent implements OnInit, OnDestroy {
   readonly eventId = Number(this.route.snapshot.paramMap.get('eventId'));
   readonly cameraUrl = signal(this.engine.streamUrl());
   readonly engineOnline = signal(true);
+  readonly exiting = signal(false);
   readonly galleryMessage = signal('Loading registered faces…');
   readonly galleryError = signal(false);
 
@@ -296,6 +299,19 @@ export class FaceTvComponent implements OnInit, OnDestroy {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     // Hand the webcam back to the browser scanner (Exit goes straight back to it).
     this.engine.stopStream().subscribe({ error: () => {} });
+  }
+
+  // Go back to the scanner only once the engine has released the webcam; leaving right away
+  // made the scanner find the camera still in use and give up.
+  async exit(): Promise<void> {
+    if (this.exiting()) return;
+    this.exiting.set(true);
+    try {
+      await firstValueFrom(this.engine.stopStream().pipe(timeout(EXIT_RELEASE_TIMEOUT_MS)));
+    } catch {
+      /* engine offline or slow — the scanner retries a busy camera by itself */
+    }
+    void this.router.navigate(['/scanner', this.eventId]);
   }
 
   @HostListener('window:pagehide')

@@ -105,6 +105,9 @@ class TrackingService:
             self._video_source = video_source
         if self.is_running:
             return
+        # A worker that died still leaves its capture holding the webcam (DirectShow is exclusive),
+        # which would block both this restart and the browser scanner. Release it first.
+        self._stop()
         self._reset_pipeline()
         self._source = self._source_factory(self._video_source)
         self._source.start()

@@ -68,7 +68,7 @@
       }
       @if (!sideOpen()) { <button type="button" (click)="sideOpen.set(true)">Attendees</button> }
       <button type="button" (click)="toggleFullscreen()">Fullscreen</button>
-      <a [routerLink]="['/scanner', eventId]">Exit</a>
+      <button type="button" (click)="exit()" [disabled]="exiting()">Exit</button>
     </div>
   </main>
 
