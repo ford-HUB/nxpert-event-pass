@@ -86,6 +86,8 @@ class TrackingService:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        # start/stop arrive on concurrent request threads (a TV page reload sends stop + start).
+        self._lifecycle_lock = threading.RLock()
         self._reset_pipeline()
 
     @property
@@ -94,20 +96,35 @@ class TrackingService:
 
     def start(self, video_source: str | None = None) -> None:
         """Start (or restart with a new source) the capture and tracking threads."""
+        with self._lifecycle_lock:
+            self._start(video_source)
+
+    def _start(self, video_source: str | None) -> None:
         if video_source is not None and video_source != self._video_source:
-            self.stop()
+            self._stop()
             self._video_source = video_source
         if self.is_running:
             return
         self._reset_pipeline()
         self._source = self._source_factory(self._video_source)
         self._source.start()
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name="face-tracking", daemon=True)
+        # Each run owns its source and stop event, so a worker that outlives stop()'s join
+        # timeout (e.g. a slow first frame) still exits instead of reading a cleared source.
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(self._source, self._stop_event),
+            name="face-tracking",
+            daemon=True,
+        )
         self._thread.start()
         logger.info("Tracking started on source %r", self._video_source)
 
     def stop(self) -> None:
+        with self._lifecycle_lock:
+            self._stop()
+
+    def _stop(self) -> None:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
@@ -203,13 +220,12 @@ class TrackingService:
         self._track_views: tuple[TrackView, ...] = ()
         self._events: deque[RecognitionEvent] = deque(maxlen=MAX_EVENTS)
 
-    def _run(self) -> None:
+    def _run(self, source: FrameSource, stop_event: threading.Event) -> None:
         last_frame_number = 0
-        while not self._stop_event.is_set():
-            assert self._source is not None
-            frame_number, frame = self._source.read_latest()
+        while not stop_event.is_set():
+            frame_number, frame = source.read_latest()
             if frame is None or frame_number == last_frame_number:
-                self._stop_event.wait(IDLE_WAIT_SECONDS)
+                stop_event.wait(IDLE_WAIT_SECONDS)
                 continue
             last_frame_number = frame_number
             try:

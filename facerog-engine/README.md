@@ -48,7 +48,11 @@ python -m venv .venv
 .venv\Scripts\activate            # Windows   (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements-dev.txt
 python scripts/download_weights.py   # SCRFD det_10g + ArcFace w600k_r50 → app/ml/weights/
+copy .env.example .env               # Windows   (Linux/macOS: cp .env.example .env)
 ```
+
+`.env`, `.env.local` and the weights are git-ignored, so a fresh clone needs these steps. Put
+`FRE_BACKEND_API_KEY` in `.env.local`; it must match `FaceEngine:ApiKey` in the API config.
 
 GPU: replace `onnxruntime` with `onnxruntime-directml` (Windows, no CUDA install needed)
 or `onnxruntime-gpu` (CUDA 12 + cuDNN 9). For a lightweight CPU setup, use
@@ -136,7 +140,7 @@ curl -F image=@group.jpg localhost:8000/api/v1/recognize
 
 - `FRE_MATCH_THRESHOLD` (default 0.40): ArcFace cosine similarity. Raise it (0.45–0.5) if strangers get matched; lower it if registered people show up as Unknown.
 - `FRE_RECOGNITION_INTERVAL_FRAMES` / `FRE_REVERIFY_INTERVAL_FRAMES`: how often unidentified tracks retry and identified tracks get re-checked.
-- All settings are listed in `.env` (every one is optional; defaults live in `app/core/config.py`).
+- All settings are listed in `.env.example` (every one is optional; defaults live in `app/core/config.py`).
 
 ## Tests
 
