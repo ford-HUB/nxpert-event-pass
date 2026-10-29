@@ -19,4 +19,6 @@ Thumbs.db
 .DS_Store
 
 # Secrets — do not commit real SMTP credentials
-appsettings.*.Local.json
+./backend/EventRegistration.Api/appsettings.*.Local.json
+./backend/EventRegistration.Api/appsettings.json
+
