@@ -1,7 +1,7 @@
 @if (sending() || confirming() || cancelling() || deleting()) {
   <div class="loading-overlay">
     <mat-spinner diameter="52"></mat-spinner>
-    <p>{{ confirming() ? 'Confirming registrations…' : cancelling() ? 'Cancelling registrations…' : deleting() ? 'Deleting attendees…' : 'Sending invitations…' }}</p>
+    <p>{{ confirming() ? 'Confirming registrations…' : cancelling() ? 'Cancelling registrations…' : deleting() ? 'Deleting attendees…' : 'Processing invitation email…' }}</p>
   </div>
 }
 

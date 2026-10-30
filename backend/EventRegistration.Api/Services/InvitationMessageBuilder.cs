@@ -11,7 +11,7 @@ using MimeKit;
 namespace EventRegistration.Api.Services;
 
 public record InvitationMessage(List<string> To, List<string> Cc, string Subject,
-    string Html, Dictionary<string, byte[]> Images, string RegisterUrl);
+    string Html, Dictionary<string, byte[]> Images, string RegisterUrl, string EditableBody);
 
 public class InvitationMessageBuilder(AppDbContext db, IConfiguration config)
 {
@@ -28,9 +28,9 @@ public class InvitationMessageBuilder(AppDbContext db, IConfiguration config)
             ? mailbox.Address.ToLowerInvariant() : null;
     }
 
-    public async Task<InvitationMessage> BuildAsync(Event ev, InvitationComposeRequest req)
+    public async Task<InvitationMessage> BuildAsync(Event ev, InvitationComposeRequest req, bool enforceRecipientEntryLimit = true)
     {
-        if ((req.To?.Count ?? 0) + (req.Cc?.Count ?? 0) > 500)
+        if (enforceRecipientEntryLimit && (req.To?.Count ?? 0) + (req.Cc?.Count ?? 0) > 500)
             throw new ArgumentException("Use @n-pax for all users, or add at most 500 individual recipient entries.");
         var directory = (await db.Users.AsNoTracking().Select(u => u.Email).ToListAsync())
             .Select(Address).Where(e => e != null).Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -57,7 +57,12 @@ public class InvitationMessageBuilder(AppDbContext db, IConfiguration config)
         var html = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;color:#202124\">" +
             "<div style=\"max-width:800px;margin:0 auto;font-size:15px;line-height:1.6\">" + body + "</div>" +
             "<div style=\"margin-top:28px\">" + EmailTemplates.Invitation(ev, WebUtility.HtmlEncode(url)) + "</div></body></html>";
-        return new InvitationMessage(to, cc, subject, html, images, url);
+        // Persist only allowlisted markup. Reinsert PNG data so a draft can be opened
+        // and edited without exposing CID paths or trusting the submitted XHTML.
+        var editableBody = body;
+        foreach (var image in images)
+            editableBody = editableBody.Replace($"cid:{image.Key}\"", $"data:image/png;base64,{Convert.ToBase64String(image.Value)}\"");
+        return new InvitationMessage(to, cc, subject, html, images, url, "<div>" + editableBody + "</div>");
     }
 
     // The editor sends serialized XHTML, not trusted HTML. Parse without DTDs or

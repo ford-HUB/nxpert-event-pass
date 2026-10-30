@@ -14,6 +14,7 @@ import {
   CheckInOptions,
   InvitationMessageRequest,
   InvitationMessageResult,
+  InvitationEmail,
   CheckInResult,
   ClaimKitResult,
   ConfirmResult,
@@ -260,6 +261,26 @@ export class ApiService {
   // Composed invitation with To / CC and inline images; errors are explained by the composer.
   sendInvitationMessage(eventId: number, message: InvitationMessageRequest): Observable<InvitationMessageResult> {
     return this.http.post<InvitationMessageResult>(this.url(`/api/events/${eventId}/invitations/compose`), message, {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  invitationEmailHistory(eventId: number): Observable<InvitationEmail[]> {
+    return this.http.get<InvitationEmail[]>(this.url(`/api/events/${eventId}/invitations/emails`), {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  invitationEmail(eventId: number, id: number): Observable<InvitationEmail> {
+    return this.http.get<InvitationEmail>(this.url(`/api/events/${eventId}/invitations/emails/${id}`), {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  updateInvitationEmail(eventId: number, id: number, message: InvitationMessageRequest & { version: string }): Observable<InvitationMessageResult> {
+    return this.http.put<InvitationMessageResult>(this.url(`/api/events/${eventId}/invitations/emails/${id}`), message, {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  cancelInvitationEmail(eventId: number, id: number, version: string): Observable<void> {
+    return this.http.post<void>(this.url(`/api/events/${eventId}/invitations/emails/${id}/cancel`), { version }, {
       context: new HttpContext().set(SKIP_ERROR_TOAST, true),
     });
   }

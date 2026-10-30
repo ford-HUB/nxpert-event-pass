@@ -24,6 +24,8 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<InvitationEmailDispatcher>();
+builder.Services.AddHostedService<InvitationEmailScheduler>();
 var viberSettings = builder.Configuration.GetSection("Viber").Get<ViberSettings>() ?? new ViberSettings();
 builder.Services.AddSingleton(viberSettings);
 builder.Services.AddScoped<ViberService>();

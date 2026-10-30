@@ -662,9 +662,31 @@ export interface InvitationMessageRequest {
   cc: string[];
   subject: string;
   bodyHtml: string;
+  scheduledAt?: string | null;
+}
+
+export interface InvitationEmail {
+  id: number;
+  eventId: number;
+  to: string[];
+  cc: string[];
+  subject: string;
+  bodyHtml?: string;
+  status: 'Scheduled' | 'Sending' | 'Sent' | 'Queued' | 'Failed' | 'Cancelled';
+  createdAt: string;
+  updatedAt: string;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string;
+  attempts: number;
+  lastError: string | null;
+  version: string;
 }
 
 export interface InvitationMessageResult {
+  id: number;
+  status: InvitationEmail['status'];
   sent: number;
   queued: number; // saved to the server outbox because SMTP is off or failed
   recipientCount: number;

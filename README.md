@@ -85,6 +85,46 @@ To send real email via Gmail:
 
 ---
 
+## Scheduled invitations and email history
+
+In an event's **Invite** tab, compose the To/CC recipients, subject and message.
+Choose **Schedule for later**, enter a future date/time in **Philippine time (UTC+8)**,
+then click **Schedule invitations**. Leaving scheduling off sends immediately.
+Full Gmail and company email addresses are supported in both To and CC. `@n-pax`
+expands to the system directory when the email is saved; that recipient list stays fixed.
+
+**Email history** below the composer provides **All emails**, **Scheduled** and **Sent**
+filters, plus **Hide emails / Show emails**. Open a message to inspect its content,
+recipients and dates. Scheduled, queued and failed messages can be edited or cancelled.
+Sent messages are read-only and can be reused as a new draft. Concurrent changes are
+checked before saving, and an email that has started sending cannot be changed.
+History records composed emails from this feature's deployment onward; earlier
+recipient invitation rows did not store message bodies and cannot be reconstructed.
+
+Deploy the frontend and backend together. The `InvitationEmailHistory` migration is
+applied by the existing `Database:AutoMigrate` startup setting (or apply it through
+your normal database migration process if that setting is disabled).
+Keep the API process running: its worker checks persisted schedules every 15 seconds,
+including overdue messages after a restart. No browser needs to remain open.
+
+Actual delivery requires working, enabled SMTP settings. Disabled/unavailable SMTP
+saves an outbox copy and marks the message **Queued**, without a sent timestamp.
+The worker retries every five minutes, up to five attempts; exhausted attempts show
+**Failed** and can be opened to retry or reschedule. **Sent** means the SMTP server
+accepted the email, rather than a guarantee of inbox placement. Interrupted sends
+require manual review before retrying because delivery may already have occurred.
+
+Run the database and mail-generation integration checks with:
+
+```powershell
+dotnet run --project backend/EventRegistration.EmailTests
+```
+
+These checks create and remove an isolated SQL Server LocalDB database and use a
+simulated transport to inspect production MIME messages without emailing anyone.
+
+---
+
 ## Scanning from a real phone (ngrok)
 
 The camera API (`getUserMedia`) requires HTTPS, except on `localhost`. To scan from

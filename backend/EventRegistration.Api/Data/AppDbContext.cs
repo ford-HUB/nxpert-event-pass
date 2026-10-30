@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Event> Events => Set<Event>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<InvitationEmail> InvitationEmails => Set<InvitationEmail>();
     public DbSet<Registration> Registrations => Set<Registration>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
     public DbSet<Session> Sessions => Set<Session>();
@@ -84,6 +85,10 @@ public class AppDbContext : DbContext
             .HasIndex(ms => ms.ControlNumber).IsUnique();
 
         b.Entity<Invitation>().HasIndex(i => i.Token).IsUnique();
+        b.Entity<InvitationEmail>().HasIndex(i => new { i.Status, i.NextAttemptAt });
+        b.Entity<InvitationEmail>().HasIndex(i => new { i.EventId, i.CreatedAt });
+        b.Entity<InvitationEmail>().HasOne(i => i.Event).WithMany()
+            .HasForeignKey(i => i.EventId).OnDelete(DeleteBehavior.Cascade);
         // Registration looks up the caller's invite by (event, email) on every submit.
         b.Entity<Invitation>().HasIndex(i => new { i.EventId, i.Email });
         b.Entity<Invitation>()
