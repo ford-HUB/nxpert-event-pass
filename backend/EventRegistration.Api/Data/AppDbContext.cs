@@ -18,6 +18,11 @@ public class AppDbContext : DbContext
     public DbSet<MealRedemption> MealRedemptions => Set<MealRedemption>();
     public DbSet<MealStub> MealStubs => Set<MealStub>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<MailPlan> MailPlans => Set<MailPlan>();
+    public DbSet<MailPlanSend> MailPlanSends => Set<MailPlanSend>();
+    public DbSet<MailPlanDelivery> MailPlanDeliveries => Set<MailPlanDelivery>();
+    public DbSet<MailPlanEventName> MailPlanEventNames => Set<MailPlanEventName>();
+    public DbSet<MailPlanSavedCc> MailPlanSavedCcs => Set<MailPlanSavedCc>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -94,6 +99,21 @@ public class AppDbContext : DbContext
         b.Entity<Invitation>()
             .HasOne(i => i.Event).WithMany(e => e.Invitations)
             .HasForeignKey(i => i.EventId).OnDelete(DeleteBehavior.Cascade);
+
+        // Mail planner: a plan outlives a deleted event (it keeps the typed event name).
+        b.Entity<MailPlan>().HasOne(p => p.Event).WithMany()
+            .HasForeignKey(p => p.EventId).OnDelete(DeleteBehavior.SetNull);
+        b.Entity<MailPlanSend>().HasOne(s => s.Plan).WithMany(p => p.Sends)
+            .HasForeignKey(s => s.PlanId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<MailPlanSend>().HasIndex(s => new { s.Status, s.NextAttemptAt });
+        b.Entity<MailPlanDelivery>().HasOne(d => d.Send).WithMany(s => s.Deliveries)
+            .HasForeignKey(d => d.SendId).OnDelete(DeleteBehavior.Cascade);
+        // My Reminders reads a user's mails by address; the scheduler looks for due reminders.
+        b.Entity<MailPlanDelivery>().HasIndex(d => d.Email);
+        b.Entity<MailPlanDelivery>().HasIndex(d => new { d.SendId, d.Email }).IsUnique();
+        b.Entity<MailPlanDelivery>().HasIndex(d => d.RemindAt).HasFilter("[RemindAt] IS NOT NULL AND [ReminderSentAt] IS NULL");
+        b.Entity<MailPlanEventName>().HasIndex(n => n.Name).IsUnique();
+        b.Entity<MailPlanSavedCc>().HasIndex(c => c.Email).IsUnique();
 
         // One feedback per user per event (updatable).
         b.Entity<Feedback>().HasIndex(f => new { f.EventId, f.UserId }).IsUnique();

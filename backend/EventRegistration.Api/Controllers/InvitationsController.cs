@@ -43,6 +43,7 @@ public class InvitationsController : ControllerBase
         InvitationMessage message;
         try {
             ValidateSchedule(req.ScheduledAt);
+            await EnsureNoScheduleConflict(eventId, req.ScheduledAt, exceptId: 0);
             message = await new InvitationMessageBuilder(_db, _config).BuildAsync(ev, req);
             if (ev.StartsAt == default || ev.EndsAt <= ev.StartsAt)
                 throw new ArgumentException("Set a valid start and end date/time for this event before sending invitations.");
@@ -94,6 +95,7 @@ public class InvitationsController : ControllerBase
         try
         {
             ValidateSchedule(req.ScheduledAt);
+            await EnsureNoScheduleConflict(eventId, req.ScheduledAt, exceptId: id);
             var ev = item.Event!;
             if (ev.StartsAt == default || ev.EndsAt <= ev.StartsAt)
                 throw new ArgumentException("Set a valid start and end date/time for this event before sending invitations.");
@@ -134,6 +136,18 @@ public class InvitationsController : ControllerBase
     {
         if (scheduledAt is not null && scheduledAt <= DateTimeOffset.UtcNow)
             throw new ArgumentException("Choose a future date and time for the scheduled email.");
+    }
+
+    // One scheduled email per event per minute, so multi-day schedules can't stack on the same time.
+    private async Task EnsureNoScheduleConflict(int eventId, DateTimeOffset? scheduledAt, int exceptId)
+    {
+        if (scheduledAt is null) return;
+        var utc = scheduledAt.Value.ToUniversalTime();
+        var start = utc.AddTicks(-(utc.Ticks % TimeSpan.TicksPerMinute));
+        var end = start.AddMinutes(1);
+        if (await _db.InvitationEmails.AnyAsync(m => m.EventId == eventId && m.Id != exceptId &&
+                m.Status == InvitationEmailStatus.Scheduled && m.ScheduledAt >= start && m.ScheduledAt < end))
+            throw new ArgumentException("Another email for this event is already scheduled at that date and time. Choose a different time.");
     }
 
     private static void ApplyMessage(InvitationEmail item, InvitationMessage message, DateTimeOffset? scheduledAt)

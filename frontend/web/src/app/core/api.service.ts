@@ -56,6 +56,11 @@ import {
   UserDto,
   UserImportRow,
   UserImportResult,
+  InboxMailDto,
+  MailPlanDto,
+  MailPlanOptions,
+  MailPlanSaveRequest,
+  MailPlanSendDto,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -284,6 +289,76 @@ export class ApiService {
       context: new HttpContext().set(SKIP_ERROR_TOAST, true),
     });
   }
+  // Pasted web image whose site blocks the browser from reading it; the API copies it (admins).
+  pastedImage(url: string): Observable<Blob> {
+    return this.http.post(this.url('/api/pasted-images'), { url }, {
+      responseType: 'blob',
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  // ---- Mail planner (admins) ----
+  mailPlans(): Observable<MailPlanDto[]> {
+    return this.http.get<MailPlanDto[]>(this.url('/api/mail-plans'));
+  }
+  mailPlan(id: number): Observable<MailPlanDto> {
+    return this.http.get<MailPlanDto>(this.url(`/api/mail-plans/${id}`));
+  }
+  mailPlanOptions(): Observable<MailPlanOptions> {
+    return this.http.get<MailPlanOptions>(this.url('/api/mail-plans/options'));
+  }
+  saveMailEventName(name: string): Observable<{ name: string }> {
+    return this.http.post<{ name: string }>(this.url('/api/mail-plans/event-names'), { name });
+  }
+  saveMailCc(email: string): Observable<{ email: string }> {
+    return this.http.post<{ email: string }>(this.url('/api/mail-plans/saved-cc'), { email });
+  }
+  forgetMailCc(email: string): Observable<void> {
+    return this.http.delete<void>(this.url('/api/mail-plans/saved-cc'), { params: { email } });
+  }
+  // Validation errors are shown by the plan dialog, which stays open.
+  createMailPlan(plan: MailPlanSaveRequest): Observable<MailPlanDto> {
+    return this.http.post<MailPlanDto>(this.url('/api/mail-plans'), plan, {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  updateMailPlan(id: number, plan: MailPlanSaveRequest): Observable<MailPlanDto> {
+    return this.http.put<MailPlanDto>(this.url(`/api/mail-plans/${id}`), plan, {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
+  }
+  deleteMailPlan(id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/mail-plans/${id}`));
+  }
+  mailPlanSendBody(sendId: number): Observable<{ bodyHtml: string }> {
+    return this.http.get<{ bodyHtml: string }>(this.url(`/api/mail-plans/sends/${sendId}/body`));
+  }
+  deleteMailPlanSend(sendId: number): Observable<{ planDeleted: boolean }> {
+    return this.http.delete<{ planDeleted: boolean }>(this.url(`/api/mail-plans/sends/${sendId}`));
+  }
+  sendMailPlanNow(sendId: number): Observable<MailPlanSendDto> {
+    return this.http.post<MailPlanSendDto>(this.url(`/api/mail-plans/sends/${sendId}/send-now`), {});
+  }
+  retryMailPlanSend(sendId: number): Observable<MailPlanSendDto> {
+    return this.http.post<MailPlanSendDto>(this.url(`/api/mail-plans/sends/${sendId}/retry`), {});
+  }
+
+  // ---- Mail planner inbox (every signed-in user) ----
+  mailInbox(): Observable<InboxMailDto[]> {
+    return this.http.get<InboxMailDto[]>(this.url('/api/mail-inbox'));
+  }
+  mailInboxBody(id: number): Observable<{ bodyHtml: string }> {
+    return this.http.get<{ bodyHtml: string }>(this.url(`/api/mail-inbox/${id}/body`));
+  }
+  setMailReminder(id: number, remindAt: Date | null): Observable<InboxMailDto> {
+    return this.http.put<InboxMailDto>(this.url(`/api/mail-inbox/${id}/reminder`), { remindAt: remindAt?.toISOString() ?? null });
+  }
+  snoozeMailReminder(id: number): Observable<InboxMailDto> {
+    return this.http.post<InboxMailDto>(this.url(`/api/mail-inbox/${id}/snooze`), {});
+  }
+  markMailDone(id: number): Observable<InboxMailDto> {
+    return this.http.post<InboxMailDto>(this.url(`/api/mail-inbox/${id}/done`), {});
+  }
+
   sendInvites(eventId: number, emails: string[]): Observable<{ sent: number; registerUrl: string }> {
     return this.http.post<{ sent: number; registerUrl: string }>(
       this.url(`/api/events/${eventId}/invitations`),

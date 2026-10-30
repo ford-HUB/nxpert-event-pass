@@ -225,6 +225,12 @@
     max-width: 1400px;
     padding-top: 32px;
   }
+
+  // Mail Planner is a planning board: use the full window width.
+  &:has(.mp-page) {
+    max-width: none;
+    padding: 24px clamp(12px, 2.5vw, 40px) 40px;
+  }
 }
 
 .verify-banner {

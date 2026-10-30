@@ -51,6 +51,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/calendar/calendar').then((m) => m.CalendarComponent),
   },
   {
+    // Mail Planner: send plans for admins, reminders on received mails for everyone.
+    path: 'mail-planner',
+    canActivate: [nonMerchantGuard],
+    loadComponent: () =>
+      import('./pages/mail-planner/mail-planner').then((m) => m.MailPlannerComponent),
+  },
+  {
     path: 'my-events',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/my-events/my-events').then((m) => m.MyEventsComponent),

@@ -383,7 +383,8 @@ body {
 }
 
 // Empty-state icon sits in a soft teal circle, like the Home icon tiles.
-.empty-state mat-icon {
+// Direct child only, so icons inside empty-state buttons keep their normal size.
+.empty-state > mat-icon {
   box-sizing: content-box;
   font-size: 40px;
   width: 40px;
@@ -1965,6 +1966,14 @@ mat-card-actions {
 }
 
 // ---- Confirm dialog ----
+// Mail plan modal (pages/mail-planner): white, rounded, content scrolls between header and footer.
+.mail-plan-panel .mat-mdc-dialog-surface {
+  --mat-dialog-container-color: #fff;
+  background: #fff !important;
+  border-radius: 20px !important;
+  overflow: hidden;
+}
+
 .app-confirm-panel .mat-mdc-dialog-surface {
   --mat-dialog-container-color: #fff;
   background: #fff !important;

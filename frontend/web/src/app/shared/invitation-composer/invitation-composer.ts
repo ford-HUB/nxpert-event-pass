@@ -4,41 +4,39 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
-import { finalize, interval } from 'rxjs';
+import { concatMap, finalize, firstValueFrom, from, interval } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { ContactDto, EventDto, InvitationEmail, InvitationMessageRequest } from '../../core/models';
+import { ContactDto, EventDto, InvitationEmail, InvitationMessageRequest, InvitationMessageResult } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ConfirmService } from '../../core/confirm.service';
+import { AuthService } from '../../core/auth.service';
 import { ALL_USERS, expandRecipients, invitationErrorMessage, recipientAddress } from '../../core/invitation.util';
+import { MatDialog } from '@angular/material/dialog';
+import { formatScheduleLabel, openScheduleDateDialog } from './schedule-date-dialog';
+import { IMAGE_TYPES, cleanNode, imageBudget, insertAtSelection, newImage, pasteMessage, readPaste, toPng } from '../rich-text/rich-text';
 
 type RecipientField = 'to' | 'cc';
 
-const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'];
-const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
-const MAX_IMAGE_EDGE = 1600;
-const MAX_IMAGES = 5;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const MAX_TOTAL_IMAGE_BYTES = 5 * 1024 * 1024;
-
-// Formatting the server keeps (InvitationMessageBuilder.RenderBody) — the preview mirrors it.
-const PREVIEW_TAGS = new Set(['p', 'div', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'ul', 'ol', 'li', 'blockquote', 'span', 'h1', 'h2', 'h3', 'a']);
-const PREVIEW_STYLES: Record<string, RegExp> = {
-  'text-align': /^(left|center|right)$/,
-  'font-weight': /^(bold|400|600|700)$/,
-  'font-style': /^(italic|normal)$/,
-  'text-decoration': /^(underline|line-through)$/,
-  color: /^#[0-9a-f]{3}([0-9a-f]{3})?$/,
-};
+const MAX_SCHEDULES = 30;
+const MAX_SAVED = 200;
+const MAX_SUGGESTIONS = 8;
+const PH_OFFSET_MS = 8 * 3600000;
+const DAY_MS = 24 * 3600000;
+// The server (InvitationMessageBuilder.InjectScheduleDay) replaces this with each email's send day.
+const SCHEDULE_DAY_TOKEN = '{{schedule_day}}';
+const SCHEDULE_DAY_PATTERN = /\{\{\s*schedule_day\s*\}\}/i;
 
 /**
- * Event invitation email, Gmail / Outlook style: To and CC chips (system users, typed addresses
- * or the @n-pax group = every system user), a formatted message with inline images, and the
+ * Event invitation email, Gmail / Outlook style: To and CC chips (typed or comma-separated
+ * addresses, previously used addresses suggested while typing, or the @n-pax group = every
+ * system user), a formatted message with inline images, and the
  * event's details + calendar invitation appended by the server.
  */
 @Component({
@@ -48,6 +46,7 @@ const PREVIEW_STYLES: Record<string, RegExp> = {
     FormsModule,
     MatAutocompleteModule,
     MatButtonModule,
+    MatButtonToggleModule,
     MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
@@ -69,15 +68,19 @@ export class InvitationComposerComponent implements OnChanges {
   @ViewChild('historyBody') set historyBody(element: ElementRef<HTMLDivElement> | undefined) {
     if (!element) return;
     const doc = new DOMParser().parseFromString(this.openedEmail()?.bodyHtml ?? '<div></div>', 'text/html');
-    element.nativeElement.replaceChildren(...Array.from(doc.body.childNodes, (n) => this.mirror(n, 0)));
+    element.nativeElement.replaceChildren(...Array.from(doc.body.childNodes, (n) => cleanNode(n)));
   }
 
   private api = inject(ApiService);
   private toast = inject(ToastService);
   private confirmer = inject(ConfirmService);
+  private dialog = inject(MatDialog);
   private destroyRef = inject(DestroyRef);
+  private auth = inject(AuthService);
 
   readonly allUsers = ALL_USERS;
+  // Addresses this admin has sent to before, offered as suggestions while typing.
+  savedAddresses = signal<string[]>(this.loadSaved());
   readonly fields: RecipientField[] = ['to', 'cc'];
   recipients: Record<RecipientField, string[]> = { to: [], cc: [] };
   query: Record<RecipientField, string> = { to: '', cc: '' };
@@ -90,7 +93,11 @@ export class InvitationComposerComponent implements OnChanges {
   // Live preview of the email in the summary panel shows the message with its formatting.
   hasMessage = signal(false);
   scheduleEnabled = false;
-  scheduleAt = '';
+  // datetime-local values in Philippine time; each date sends its own copy of the email.
+  scheduleAt: string[] = [''];
+  readonly maxSchedules = MAX_SCHEDULES;
+  readonly scheduleDayToken = SCHEDULE_DAY_TOKEN;
+  hasScheduleDay = signal(false);
   history = signal<InvitationEmail[]>([]);
   historyLoading = signal(false);
   historyError = signal('');
@@ -98,6 +105,8 @@ export class InvitationComposerComponent implements OnChanges {
   historyFilter: 'All' | 'Scheduled' | 'Sent' = 'All';
   openedEmail = signal<InvitationEmail | null>(null);
   openingEmail = signal(false);
+  // Row showing the "opening" indicator while its email loads.
+  openingId: number | null = null;
   editingEmail: InvitationEmail | null = null;
   private historyEventId: number | null = null;
 
@@ -119,8 +128,16 @@ export class InvitationComposerComponent implements OnChanges {
   }
 
   get filteredHistory(): InvitationEmail[] {
-    return this.history().filter((m) => this.historyFilter === 'All' ||
-      (this.historyFilter === 'Sent' ? m.status === 'Sent' : ['Scheduled', 'Queued', 'Sending', 'Failed'].includes(m.status)));
+    return this.history().filter((m) => this.matchesFilter(m, this.historyFilter));
+  }
+
+  historyCount(filter: 'All' | 'Scheduled' | 'Sent'): number {
+    return this.history().filter((m) => this.matchesFilter(m, filter)).length;
+  }
+
+  private matchesFilter(email: InvitationEmail, filter: 'All' | 'Scheduled' | 'Sent'): boolean {
+    return filter === 'All' ||
+      (filter === 'Sent' ? email.status === 'Sent' : ['Scheduled', 'Queued', 'Sending', 'Failed'].includes(email.status));
   }
 
   canEdit(email: InvitationEmail): boolean {
@@ -153,8 +170,15 @@ export class InvitationComposerComponent implements OnChanges {
     if (this.historyVisible) this.loadHistory();
   }
 
+  // Rows expand in place; clicking the open row collapses it.
+  toggleEmail(email: InvitationEmail): void {
+    if (this.openedEmail()?.id === email.id) this.openedEmail.set(null);
+    else this.openEmail(email);
+  }
+
   openEmail(email: InvitationEmail): void {
     if (this.openingEmail()) return;
+    this.openingId = email.id;
     this.openingEmail.set(true);
     this.openedEmail.set(null);
     const eventId = this.event.id;
@@ -178,12 +202,12 @@ export class InvitationComposerComponent implements OnChanges {
     this.query = { to: '', cc: '' };
     this.subject = email.subject;
     this.scheduleEnabled = !copy && !!email.scheduledAt;
-    this.scheduleAt = email.scheduledAt ? new Date(new Date(email.scheduledAt).getTime() + 8 * 3600000).toISOString().slice(0, 16) : '';
+    this.scheduleAt = [email.scheduledAt ? this.toPhInput(new Date(email.scheduledAt).getTime()) : ''];
     // Rebuild nodes using the same allowlist as the preview. Never inject stored
     // content directly into contenteditable, even though the API sanitizes it.
     const doc = new DOMParser().parseFromString(email.bodyHtml ?? '<div></div>', 'text/html');
     const content = doc.body.firstElementChild?.childNodes ?? doc.body.childNodes;
-    this.editor.nativeElement.replaceChildren(...Array.from(content, (n) => this.mirror(n, 0)));
+    this.editor.nativeElement.replaceChildren(...Array.from(content, (n) => cleanNode(n)));
     this.selection = null;
     this.syncPreview();
     this.editor.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -212,10 +236,84 @@ export class InvitationComposerComponent implements OnChanges {
     this.query = { to: '', cc: '' };
     this.subject = `You're invited: ${this.event.title}`.slice(0, 200);
     this.scheduleEnabled = false;
-    this.scheduleAt = '';
+    this.scheduleAt = [''];
     this.editor.nativeElement.replaceChildren();
     this.selection = null;
     this.syncPreview();
+  }
+
+  // ---- Schedule dates ----
+
+  // The + button adds the next free day after the last date, at the same time.
+  addSchedule(): void {
+    if (this.scheduleAt.length >= MAX_SCHEDULES) return;
+    const last = this.parsePh(this.scheduleAt[this.scheduleAt.length - 1]);
+    let next = last === null ? null : last + DAY_MS;
+    while (next !== null && this.scheduleAt.some((v) => this.minuteOf(this.parsePh(v)) === this.minuteOf(next))) next += DAY_MS;
+    this.scheduleAt = [...this.scheduleAt, next === null ? '' : this.toPhInput(next)];
+  }
+
+  removeSchedule(index: number): void {
+    this.scheduleAt = this.scheduleAt.filter((_, i) => i !== index);
+  }
+
+  scheduleLabel(value: string): string {
+    return formatScheduleLabel(value);
+  }
+
+  // Calendar + hour/minute/AM-PM dialog; it refuses past or conflicting times before closing.
+  pickSchedule(index: number): void {
+    if (this.sending()) return;
+    openScheduleDateDialog(this.dialog, {
+      title: this.scheduleAt.length > 1 ? `Send date and time #${index + 1}` : 'Send date and time',
+      value: this.scheduleAt[index],
+      validate: (value) => this.issueFor(value, index, true),
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((value) => {
+      if (value) this.scheduleAt = this.scheduleAt.map((v, i) => (i === index ? value : v));
+    });
+  }
+
+  // Two sends of the same event on the same day and minute conflict, whether in this draft or
+  // already scheduled. The email being edited is replaced, so it doesn't conflict with itself.
+  scheduleIssue(index: number): string {
+    return this.issueFor(this.scheduleAt[index], index, false);
+  }
+
+  // Inline messages flag only the later of two equal dates; the dialog checks against all others.
+  private issueFor(value: string, index: number, compareAll: boolean): string {
+    if (!value) return '';
+    const time = this.parsePh(value);
+    if (time === null) return 'Enter a valid date and time.';
+    if (time <= Date.now()) return 'Choose a future date and time.';
+    const minute = this.minuteOf(time);
+    const twin = this.scheduleAt.findIndex((v, i) => (compareAll ? i !== index : i < index) && this.minuteOf(this.parsePh(v)) === minute);
+    if (twin >= 0) return `Same day and time as date #${twin + 1}. Choose a different time.`;
+    const taken = this.history().some((m) => m.status === 'Scheduled' && m.scheduledAt && m.id !== this.editingEmail?.id &&
+      this.minuteOf(new Date(m.scheduledAt).getTime()) === minute);
+    return taken ? 'Another email for this event is already scheduled at this day and time.' : '';
+  }
+
+  // The send-day placeholder only makes sense across several dates. A saved email being edited
+  // keeps it, since it may be one day of an earlier multi-date schedule.
+  get canUseScheduleDay(): boolean {
+    return this.scheduleEnabled && (this.scheduleAt.length > 1 || !!this.editingEmail);
+  }
+
+  insertScheduleDay(): void {
+    this.insertNode(document.createTextNode(SCHEDULE_DAY_TOKEN));
+  }
+
+  private parsePh(value: string): number | null {
+    const time = value ? new Date(value + '+08:00').getTime() : NaN;
+    return Number.isFinite(time) ? time : null;
+  }
+
+  private toPhInput(time: number): string {
+    return new Date(time + PH_OFFSET_MS).toISOString().slice(0, 16);
+  }
+
+  private minuteOf(time: number | null): number | null {
+    return time === null ? null : Math.floor(time / 60000);
   }
 
   // Unique addresses after @n-pax expansion; To wins over CC.
@@ -233,25 +331,56 @@ export class InvitationComposerComponent implements OnChanges {
     return expandRecipients([ALL_USERS], [], this.contacts.map((c) => c.email)).to.length;
   }
 
-  suggestions(field: RecipientField): ContactDto[] {
+  // Saved addresses matching what is being typed; nothing is listed until the admin types.
+  suggestions(field: RecipientField): string[] {
     const q = this.query[field].trim().toLowerCase();
-    return this.contacts
-      .filter(
-        (c) =>
-          recipientAddress(c.email) &&
-          !this.recipients[field].includes(c.email.toLowerCase()) &&
-          `${c.fullName} ${c.email} ${c.organization ?? ''}`.toLowerCase().includes(q),
-      )
-      .slice(0, 15);
+    if (!q) return [];
+    return this.savedAddresses()
+      .filter((a) => a.includes(q) && !this.recipients[field].includes(a))
+      .slice(0, MAX_SUGGESTIONS);
   }
 
-  showGroup(field: RecipientField): boolean {
-    const q = this.query[field].trim().toLowerCase();
-    return (
-      !this.recipients[field].includes(ALL_USERS) &&
-      this.directoryCount > 0 &&
-      (!q || ALL_USERS.includes(q) || 'all system users'.includes(q))
-    );
+  // ---- Saved addresses (per admin, in this browser) ----
+
+  private savedKey(): string | null {
+    const uid = this.auth.auth()?.userId;
+    return uid ? `evt_saved_recipients_${uid}` : null;
+  }
+
+  private loadSaved(): string[] {
+    const key = this.savedKey();
+    if (!key) return [];
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
+      return Array.isArray(parsed)
+        ? parsed.map((v) => (typeof v === 'string' ? recipientAddress(v) : null)).filter((a): a is string => !!a && a !== ALL_USERS)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private storeSaved(addresses: string[]): void {
+    this.savedAddresses.set(addresses.slice(0, MAX_SAVED));
+    const key = this.savedKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(this.savedAddresses()));
+    } catch {
+      /* storage may be unavailable (private mode) — suggestions still work for this session */
+    }
+  }
+
+  // Most recently used first; @n-pax is a group, not an address, so it is never saved.
+  private rememberAddresses(addresses: string[]): void {
+    const used = addresses.filter((a) => a !== ALL_USERS);
+    if (used.length) this.storeSaved([...new Set([...used, ...this.savedAddresses()])]);
+  }
+
+  forgetAddress(event: MouseEvent, address: string): void {
+    // Keep the click from selecting the option underneath.
+    event.stopPropagation();
+    this.storeSaved(this.savedAddresses().filter((a) => a !== address));
   }
 
   label(address: string): string {
@@ -267,6 +396,7 @@ export class InvitationComposerComponent implements OnChanges {
       return false;
     }
     this.recipients[field] = [...new Set([...this.recipients[field], ...(addresses as string[])])];
+    this.rememberAddresses(addresses as string[]);
     this.query[field] = '';
     return true;
   }
@@ -296,39 +426,9 @@ export class InvitationComposerComponent implements OnChanges {
   // created and text is copied as text, never parsed as HTML. Links are styled but inert.
   syncPreview(): void {
     const editor = this.editor.nativeElement;
-    this.previewBody.nativeElement.replaceChildren(...Array.from(editor.childNodes, (n) => this.mirror(n, 0)));
+    this.previewBody.nativeElement.replaceChildren(...Array.from(editor.childNodes, (n) => cleanNode(n)));
     this.hasMessage.set(!!editor.textContent?.trim() || !!editor.querySelector('img'));
-  }
-
-  private mirror(node: Node, depth: number): Node {
-    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? '');
-    const fragment = document.createDocumentFragment();
-    if (!(node instanceof HTMLElement) || depth > 30) return fragment;
-    const tag = node.tagName.toLowerCase();
-    if (tag === 'img') {
-      const src = (node as HTMLImageElement).src;
-      if (!src.startsWith('data:image/png;base64,')) return fragment;
-      const img = document.createElement('img');
-      img.src = src;
-      img.alt = (node as HTMLImageElement).alt || 'Invitation image';
-      return img;
-    }
-    const children = Array.from(node.childNodes, (n) => this.mirror(n, depth + 1));
-    if (!PREVIEW_TAGS.has(tag)) {
-      fragment.append(...children);
-      return fragment;
-    }
-    const el = document.createElement(tag);
-    if (tag === 'a') {
-      const href = node.getAttribute('href') ?? '';
-      if (/^(https?:\/\/|mailto:)/i.test(href)) el.setAttribute('href', href);
-    }
-    for (const [prop, ok] of Object.entries(PREVIEW_STYLES)) {
-      const value = node.style.getPropertyValue(prop).trim().toLowerCase();
-      if (value && ok.test(value)) el.style.setProperty(prop, value);
-    }
-    el.append(...children);
-    return el;
+    this.hasScheduleDay.set(SCHEDULE_DAY_PATTERN.test(editor.textContent ?? ''));
   }
 
   // Same link the server builds (App:FrontendBaseUrl is this app's own origin).
@@ -402,16 +502,9 @@ export class InvitationComposerComponent implements OnChanges {
     this.rememberSelection();
   }
 
-  private insertNode(node: Node): void {
+  private insertNode(...nodes: Node[]): void {
     this.restoreSelection();
-    const selection = window.getSelection()!;
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    insertAtSelection(nodes);
     this.rememberSelection();
     this.syncPreview();
   }
@@ -423,57 +516,35 @@ export class InvitationComposerComponent implements OnChanges {
     if (file) await this.insertImage(file);
   }
 
+  // Pasted text keeps its basic formatting and images; images are re-encoded like uploads.
   async pasteBody(event: ClipboardEvent): Promise<void> {
     event.preventDefault();
+    if (this.processingImage()) return;
     this.rememberSelection();
-    const image = Array.from(event.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
-    if (image) {
-      await this.insertImage(image);
-      return;
+    this.processingImage.set(true);
+    try {
+      const result = await readPaste(event.clipboardData, imageBudget(this.editor.nativeElement), (url) => firstValueFrom(this.api.pastedImage(url)).catch(() => undefined));
+      if (result.nodes.length) this.insertNode(...result.nodes);
+      if (result.skipped || result.overLimit) this.toast.warning(pasteMessage(result), 8000);
+    } finally {
+      this.processingImage.set(false);
     }
-    // Plain text only: no scripts, remote tracking images or client-specific markup.
-    const text = event.clipboardData?.getData('text/plain') ?? '';
-    this.restoreSelection();
-    document.execCommand('insertText', false, text);
-    this.rememberSelection();
   }
 
   // Images are re-encoded as static PNGs (max 1600 px); the server sends them as CID parts.
   async insertImage(file: File): Promise<void> {
     if (this.processingImage()) return;
-    if (!IMAGE_TYPES.includes(file.type) || file.size > MAX_SOURCE_BYTES) {
+    if (!IMAGE_TYPES.includes(file.type)) {
       this.toast.error('Choose a PNG, JPEG, WebP, GIF or BMP image up to 10 MB.');
       return;
     }
     this.processingImage.set(true);
-    const objectUrl = URL.createObjectURL(file);
     try {
-      const image = new Image();
-      image.src = objectUrl;
-      await image.decode();
-      const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const png = canvas.toDataURL('image/png');
-      const existing = Array.from(this.editor.nativeElement.querySelectorAll('img'));
-      const size = (data: string) => Math.ceil(((data.split(',')[1]?.length ?? 0) * 3) / 4);
-      const total = existing.reduce((sum, i) => sum + size(i.src), size(png));
-      if (existing.length >= MAX_IMAGES || size(png) > MAX_IMAGE_BYTES || total > MAX_TOTAL_IMAGE_BYTES)
-        throw new Error('Use up to five images, at most 2 MB each and 5 MB in total after resizing.');
-      const node = document.createElement('img');
-      node.src = png;
-      node.alt = file.name;
-      node.style.maxWidth = '100%';
-      node.style.height = 'auto';
-      node.style.display = 'block';
-      this.insertNode(node);
-      this.insertNode(document.createElement('br'));
+      const png = await toPng(file, imageBudget(this.editor.nativeElement));
+      this.insertNode(newImage(png, file.name), document.createElement('br'));
     } catch (error) {
       this.toast.error(error instanceof Error ? error.message : 'Could not read this image.');
     } finally {
-      URL.revokeObjectURL(objectUrl);
       this.processingImage.set(false);
     }
   }
@@ -489,37 +560,68 @@ export class InvitationComposerComponent implements OnChanges {
       this.toast.error('Enter a subject up to 200 characters.');
       return;
     }
-    let scheduledAt: string | null = null;
+    if (this.hasScheduleDay() && !this.canUseScheduleDay) {
+      this.toast.error(`${SCHEDULE_DAY_TOKEN} only works when scheduling on two or more dates. Remove it or add another date.`);
+      return;
+    }
+    let schedules: (string | null)[] = [null];
     if (this.scheduleEnabled) {
-      const date = new Date(this.scheduleAt + '+08:00');
-      if (!this.scheduleAt || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
-        this.toast.error('Choose a future date and time in Philippine time (UTC+8).');
+      if (this.scheduleAt.some((v) => !v)) {
+        this.toast.error('Choose a date and time in Philippine time (UTC+8) for every schedule, or remove the empty ones.');
         return;
       }
-      scheduledAt = date.toISOString();
+      const issue = this.scheduleAt.map((_, i) => this.scheduleIssue(i)).find(Boolean);
+      if (issue) {
+        this.toast.error(issue);
+        return;
+      }
+      schedules = this.scheduleAt.map((v) => new Date(this.parsePh(v)!).toISOString());
     }
     // XHTML: the server parses it without DTDs and rebuilds an allowlist of safe formatting.
     const bodyHtml = new XMLSerializer().serializeToString(this.editor.nativeElement);
-    const request: InvitationMessageRequest = {
-      to: [...this.recipients.to], cc: [...this.recipients.cc], subject: this.subject.trim(), bodyHtml, scheduledAt,
-    };
-    const operation = this.editingEmail
-      ? this.api.updateInvitationEmail(this.event.id, this.editingEmail.id, { ...request, version: this.editingEmail.version })
-      : this.api.sendInvitationMessage(this.event.id, request);
+    const base = { to: [...this.recipients.to], cc: [...this.recipients.cc], subject: this.subject.trim(), bodyHtml };
+    // When editing, the first date updates the saved email; every other date adds a new one.
+    const editing = this.editingEmail;
+    const results: InvitationMessageResult[] = [];
     this.setSending(true);
-    operation
-      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.setSending(false)))
+    from(schedules)
+      .pipe(
+        concatMap((scheduledAt, i) => {
+          const request: InvitationMessageRequest = { ...base, scheduledAt };
+          return i === 0 && editing
+            ? this.api.updateInvitationEmail(this.event.id, editing.id, { ...request, version: editing.version })
+            : this.api.sendInvitationMessage(this.event.id, request);
+        }),
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.setSending(false)),
+      )
       .subscribe({
         next: (result) => {
-          if (result.queued || result.status === 'Failed') this.toast.warning(result.message, 8000);
+          results.push(result);
+          if (results.length < schedules.length) return;
+          const problem = results.find((r) => r.queued || r.status === 'Failed');
+          this.rememberAddresses([...base.to, ...base.cc]);
+          if (problem) this.toast.warning(problem.message, 8000);
+          else if (results.length > 1) this.toast.success(`Invitation scheduled on ${results.length} dates for ${result.recipientCount} recipient(s).`);
           else this.toast.success(result.message);
           this.resetDraft();
           this.openedEmail.set(null);
           this.loadHistory();
           this.sent.emit();
         },
-        // The draft is kept so it can be retried.
-        error: (error) => this.toast.error(invitationErrorMessage(error), 10000),
+        error: (error) => {
+          const message = invitationErrorMessage(error);
+          // The draft is kept so it can be retried, minus the dates already saved.
+          if (!results.length) {
+            this.toast.error(message, 10000);
+            return;
+          }
+          this.scheduleAt = this.scheduleAt.slice(results.length);
+          this.editingEmail = null;
+          this.openedEmail.set(null);
+          this.loadHistory();
+          this.toast.error(`${results.length} of ${schedules.length} dates were scheduled; the rest were not. ${message}`, 10000);
+        },
       });
   }
 

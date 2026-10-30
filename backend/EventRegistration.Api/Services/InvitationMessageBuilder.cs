@@ -28,7 +28,19 @@ public class InvitationMessageBuilder(AppDbContext db, IConfiguration config)
             ? mailbox.Address.ToLowerInvariant() : null;
     }
 
-    public async Task<InvitationMessage> BuildAsync(Event ev, InvitationComposeRequest req, bool enforceRecipientEntryLimit = true)
+    // {{schedule_day}} in the body (inserted by the composer) is replaced with the send day at delivery time.
+    private static readonly System.Text.RegularExpressions.Regex ScheduleDayPattern = new(@"\{\{\s*schedule_day\s*\}\}",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
+    // Philippine date of the send, e.g. "Friday, October 30, 2026". The body is already HTML-encoded.
+    public static string InjectScheduleDay(string html, DateTimeOffset sendAt) =>
+        ScheduleDayPattern.Replace(html, WebUtility.HtmlEncode(sendAt.ToOffset(TimeSpan.FromHours(8))
+            .ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture)));
+
+    // sendAt is set only when delivering; saved drafts keep the placeholder so each send fills its own day.
+    public async Task<InvitationMessage> BuildAsync(Event ev, InvitationComposeRequest req, bool enforceRecipientEntryLimit = true,
+        DateTimeOffset? sendAt = null)
     {
         if (enforceRecipientEntryLimit && (req.To?.Count ?? 0) + (req.Cc?.Count ?? 0) > 500)
             throw new ArgumentException("Use @n-pax for all users, or add at most 500 individual recipient entries.");
@@ -55,14 +67,49 @@ public class InvitationMessageBuilder(AppDbContext db, IConfiguration config)
         var url = $"{frontend}/e/{Uri.EscapeDataString(ev.PublicSlug)}";
         // A composed message can have CC recipients: do not share personal magic-login tokens.
         var html = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;color:#202124\">" +
-            "<div style=\"max-width:800px;margin:0 auto;font-size:15px;line-height:1.6\">" + body + "</div>" +
+            "<div style=\"max-width:800px;margin:0 auto;font-size:15px;line-height:1.6\">" +
+            (sendAt is null ? body : InjectScheduleDay(body, sendAt.Value)) + "</div>" +
             "<div style=\"margin-top:28px\">" + EmailTemplates.Invitation(ev, WebUtility.HtmlEncode(url)) + "</div></body></html>";
         // Persist only allowlisted markup. Reinsert PNG data so a draft can be opened
         // and edited without exposing CID paths or trusting the submitted XHTML.
-        var editableBody = body;
+        return new InvitationMessage(to, cc, subject, html, images, url, EditableBody(body, images));
+    }
+
+    // Rendered body with its PNGs put back as data URLs, wrapped so it parses as one XHTML document.
+    public static string EditableBody(string body, Dictionary<string, byte[]> images)
+    {
         foreach (var image in images)
-            editableBody = editableBody.Replace($"cid:{image.Key}\"", $"data:image/png;base64,{Convert.ToBase64String(image.Value)}\"");
-        return new InvitationMessage(to, cc, subject, html, images, url, "<div>" + editableBody + "</div>");
+            body = body.Replace($"cid:{image.Key}\"", $"data:image/png;base64,{Convert.ToBase64String(image.Value)}\"");
+        return "<div>" + body + "</div>";
+    }
+
+    // Plain text of a sanitized body (Viber messages, list previews): one line per block.
+    public static string PlainText(string? xhtml)
+    {
+        if (string.IsNullOrWhiteSpace(xhtml)) return "";
+        XElement root;
+        try
+        {
+            using var reader = XmlReader.Create(new StringReader(xhtml), new XmlReaderSettings {
+                DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 8_000_000,
+            });
+            root = XDocument.Load(reader).Root!;
+        }
+        catch (XmlException) { return ""; }
+        var text = new StringBuilder();
+        void Walk(XNode node)
+        {
+            if (node is XText t) { text.Append(t.Value); return; }
+            if (node is not XElement el) return;
+            var tag = el.Name.LocalName.ToLowerInvariant();
+            if (tag == "br") { text.Append('\n'); return; }
+            if (tag == "li") text.Append("• ");
+            foreach (var child in el.Nodes()) Walk(child);
+            if (tag is "p" or "div" or "li" or "h1" or "h2" or "h3" or "blockquote") text.Append('\n');
+        }
+        Walk(root);
+        var lines = text.ToString().Split('\n').Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"[ \t ]+", " ").Trim());
+        return System.Text.RegularExpressions.Regex.Replace(string.Join('\n', lines), @"\n{3,}", "\n\n").Trim();
     }
 
     // The editor sends serialized XHTML, not trusted HTML. Parse without DTDs or

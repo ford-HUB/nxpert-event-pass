@@ -30,7 +30,8 @@ public class InvitationEmailDispatcher(AppDbContext db, EmailService email, ICon
             var ev = item.Event ?? throw new InvalidOperationException("The event no longer exists.");
             var message = await new InvitationMessageBuilder(db, config).BuildAsync(ev,
                 new(JsonSerializer.Deserialize<List<string>>(item.ToJson),
-                    JsonSerializer.Deserialize<List<string>>(item.CcJson), item.Subject, item.BodyHtml), enforceRecipientEntryLimit: false);
+                    JsonSerializer.Deserialize<List<string>>(item.CcJson), item.Subject, item.BodyHtml), enforceRecipientEntryLimit: false,
+                sendAt: item.ScheduledAt ?? DateTimeOffset.UtcNow);
             if (ev.StartsAt == default || ev.EndsAt <= ev.StartsAt)
                 throw new ArgumentException("Set a valid start and end date/time for this event.");
             await db.Events.Where(e => e.Id == ev.Id)

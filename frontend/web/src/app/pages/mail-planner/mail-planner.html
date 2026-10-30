@@ -1,0 +1,313 @@
+<div class="mp-page">
+  <div class="mp-header">
+    <div class="page-title">
+      <mat-icon color="primary">schedule_send</mat-icon>
+      <div>
+        <h1>Mail Planner</h1>
+        <p class="mp-subtitle">Create mail plans with target days and receiver lists · turn received mails into reminders</p>
+      </div>
+    </div>
+    <button mat-icon-button (click)="load()" [disabled]="loading()" aria-label="Refresh" matTooltip="Refresh">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+
+  @if (loadError()) {
+    <div class="mp-card load-error" role="alert">
+      <mat-icon>cloud_off</mat-icon><span>{{ loadError() }}</span>
+      <button type="button" class="ev-btn sm" (click)="load()">Try again</button>
+    </div>
+  }
+
+  @if (auth.isAdmin()) {
+    <div class="mp-tabs" role="tablist">
+      <button type="button" role="tab" class="mp-tab" [class.active]="tab() === 'plan'"
+              [attr.aria-selected]="tab() === 'plan'" (click)="tab.set('plan')">
+        <mat-icon>send_time_extension</mat-icon> Send Plan
+      </button>
+      <button type="button" role="tab" class="mp-tab" [class.active]="tab() === 'reminders'"
+              [attr.aria-selected]="tab() === 'reminders'" (click)="tab.set('reminders')">
+        <mat-icon>notifications_active</mat-icon> My Reminders
+        @if (reminderCounts()['Due today']) { <span class="tab-badge">{{ reminderCounts()['Due today'] }}</span> }
+      </button>
+    </div>
+  }
+
+  <!-- ================= SEND PLAN (organizer) ================= -->
+  @if (tab() === 'plan') {
+    <section class="kpi-row">
+      <div class="kpi"><span class="kpi-icon"><mat-icon>event_repeat</mat-icon></span>
+        <span><span class="kpi-value">{{ stats().active }}</span><span class="kpi-label">Active plans</span></span></div>
+      <div class="kpi"><span class="kpi-icon today"><mat-icon>today</mat-icon></span>
+        <span><span class="kpi-value">{{ stats().today }}</span><span class="kpi-label">Going out today</span></span></div>
+      <div class="kpi"><span class="kpi-icon draft"><mat-icon>edit_note</mat-icon></span>
+        <span><span class="kpi-value">{{ stats().drafts }}</span><span class="kpi-label">Draft plans</span></span></div>
+      <div class="kpi"><span class="kpi-icon reach"><mat-icon>forward_to_inbox</mat-icon></span>
+        <span><span class="kpi-value">{{ stats().deliveries }}</span><span class="kpi-label">Scheduled deliveries</span></span></div>
+      @if (stats().failed) {
+        <div class="kpi alert"><span class="kpi-icon failed"><mat-icon>error_outline</mat-icon></span>
+          <span><span class="kpi-value">{{ stats().failed }}</span><span class="kpi-label">Failed sends</span></span></div>
+      }
+    </section>
+
+    <section class="week-strip" aria-label="Target day">
+      @for (day of week(); track day.getTime()) {
+        @let n = countOn(day);
+        <button type="button" class="day-chip" [class.active]="sameDay(day, selectedDay())" (click)="selectedDay.set(day)">
+          <span class="day-name">{{ isToday(day) ? 'Today' : (day | date: 'EEE') }}</span>
+          <span class="day-num">{{ day | date: 'd' }}</span>
+          <span class="day-month">{{ day | date: 'MMM' }}</span>
+          <span class="day-count" [class.empty]="!n">{{ n ? n + ' mail' + (n > 1 ? 's' : '') : 'Free' }}</span>
+        </button>
+      }
+    </section>
+
+    <div class="mp-layout">
+      <section class="mp-card timeline">
+        <div class="card-head">
+          <h2>{{ isToday(selectedDay()) ? 'Today' : (selectedDay() | date: 'EEEE') }},
+            <span class="muted">{{ selectedDay() | date: 'MMMM d' }}</span></h2>
+          <button type="button" class="ev-btn solid" (click)="openPlan()"><mat-icon>add</mat-icon> Create plan</button>
+        </div>
+
+        @for (item of dayItems(); track item.send.id) {
+          @let m = item.plan;
+          @let status = m.draft ? 'Draft' : item.send.status;
+          <article class="plan-item" [class.sent]="status === 'Sent'" [class.failed]="status === 'Failed'">
+            <div class="plan-time">
+              <span class="t">{{ item.send.at | date: 'h:mm' }}</span>
+              <span class="ampm">{{ item.send.at | date: 'a' }}</span>
+            </div>
+            <div class="plan-rail" aria-hidden="true"><span class="dot"></span></div>
+            <div class="plan-body">
+              <div class="plan-top">
+                <span class="kind-tag" [attr.data-kind]="m.kind"><mat-icon>{{ kindIcons[m.kind] }}</mat-icon>{{ m.kind }}</span>
+                @if (item.total > 1) { <span class="day-of">Day {{ item.index }} of {{ item.total }}</span> }
+                <span class="spacer"></span>
+                <span [class]="'status-pill ' + statusClass(status)">{{ status }}</span>
+              </div>
+              @let bodyKey = 's' + item.send.id;
+              <h3 class="plan-subject">{{ item.send.subject }}</h3>
+              @if (expanded().has(bodyKey) && bodies().get(bodyKey); as body) {
+                <app-rich-text-view class="mail-body" [html]="body" />
+              } @else {
+                <p class="mail-body" [class.clamped]="!expanded().has(bodyKey)">{{ item.send.preview }}</p>
+              }
+              @if (isLong(item.send.preview, item.send.images)) {
+                <button type="button" class="body-toggle" (click)="toggleBody(bodyKey, sendBody(item.send))">
+                  {{ expanded().has(bodyKey) ? 'Show less' : item.send.images ? 'Read full message (' + item.send.images + ' image' + (item.send.images === 1 ? ')' : 's)') : 'Read full message' }}
+                </button>
+              }
+              @if (item.send.lastError && status !== 'Sent') {
+                <p class="send-error"><mat-icon>error_outline</mat-icon>{{ item.send.lastError }}</p>
+              }
+              <div class="plan-meta">
+                @if (m.event) {
+                  <span><mat-icon>event</mat-icon>{{ m.event }}</span>
+                } @else {
+                  <span class="general-chip"><mat-icon>campaign</mat-icon>General mail</span>
+                }
+                <span [matTooltip]="receiverSummary(m)"><mat-icon>group</mat-icon>{{ item.receivers }} receivers · {{ receiverSummary(m) }}</span>
+                <span><mat-icon>{{ channelIcons[m.channel] }}</mat-icon>{{ m.channel }}</span>
+              </div>
+              <div class="plan-actions">
+                @switch (status) {
+                  @case ('Failed') {
+                    <button type="button" class="ev-btn solid sm" (click)="retry(item)" [disabled]="busy()"><mat-icon>replay</mat-icon> Retry</button>
+                  }
+                  @case ('Queued') {
+                    <button type="button" class="ev-btn sm" (click)="retry(item)" [disabled]="busy()"><mat-icon>replay</mat-icon> Retry now</button>
+                  }
+                  @case ('Sending') {
+                    <span class="muted sent-note"><mat-icon>outgoing_mail</mat-icon> Sending to {{ item.receivers }}…</span>
+                  }
+                  @case ('Sent') {
+                    <span class="muted sent-note"><mat-icon>done_all</mat-icon> Delivered to {{ item.receivers }}</span>
+                  }
+                  @case ('Draft') {
+                    <button type="button" class="ev-btn sm" (click)="openPlan(m)" [disabled]="busy()"><mat-icon>edit</mat-icon> Finish plan</button>
+                  }
+                  @default {
+                    <button type="button" class="ev-btn sm" (click)="openPlan(m)" [disabled]="busy()"><mat-icon>edit</mat-icon> Edit plan</button>
+                    <button type="button" class="ev-btn sm" (click)="sendNow(item)" [disabled]="busy()"><mat-icon>send</mat-icon> Send now</button>
+                  }
+                }
+                @if (status !== 'Sent' && status !== 'Sending') {
+                  <button mat-icon-button class="remove-btn" (click)="removeDay(item)" [disabled]="busy()" aria-label="Remove this day" matTooltip="Remove this day">
+                    <mat-icon>event_busy</mat-icon>
+                  </button>
+                }
+              </div>
+            </div>
+          </article>
+        } @empty {
+          <div class="empty-state">
+            <mat-icon>event_note</mat-icon>
+            <p>{{ loading() ? 'Loading plans…' : 'Nothing planned for this day.' }}</p>
+            <button type="button" class="ev-btn solid" (click)="openPlan()"><mat-icon>add</mat-icon> Plan a mail on {{ selectedDay() | date: 'MMM d' }}</button>
+          </div>
+        }
+      </section>
+
+      <aside class="mp-card plan-list">
+        <div class="card-head">
+          <h2>Mail plans</h2>
+          <span class="status-pill brand">{{ plans().length }}</span>
+        </div>
+        @for (p of planList(); track p.id) {
+          @let next = nextSend(p);
+          @let sent = sentCount(p);
+          <div class="plan-row" [class.draft]="p.draft">
+            <button type="button" class="plan-row-main" (click)="jumpTo(p)" [attr.aria-label]="'Show ' + planTitle(p) + ' on the timeline'">
+              <span class="pr-icon" [attr.data-kind]="p.kind"><mat-icon>{{ kindIcons[p.kind] }}</mat-icon></span>
+              <span class="pr-text">
+                <strong>{{ planTitle(p) }}</strong>
+                <span class="muted">
+                  {{ p.sends.length }} day{{ p.sends.length === 1 ? '' : 's' }} · {{ receiverCounts().get(p.id) }} receivers
+                </span>
+                <span class="pr-next">
+                  @if (p.draft) { <span class="status-pill">Draft</span> }
+                  @else if (next) { <mat-icon>schedule_send</mat-icon>Next {{ next.at | date: 'EEE, MMM d · h:mm a' }} }
+                  @else { <mat-icon>done_all</mat-icon>Completed }
+                </span>
+                <span class="pr-progress" [attr.aria-label]="sent + ' of ' + p.sends.length + ' days sent'">
+                  <span [style.width.%]="(sent / p.sends.length) * 100"></span>
+                </span>
+              </span>
+            </button>
+            <div class="pr-actions">
+              <button mat-icon-button (click)="openPlan(p)" [disabled]="busy()" aria-label="Edit plan" matTooltip="Edit plan"><mat-icon>edit</mat-icon></button>
+              <button mat-icon-button class="remove-btn" (click)="deletePlan(p)" [disabled]="busy()" aria-label="Delete plan" matTooltip="Delete plan"><mat-icon>delete_outline</mat-icon></button>
+            </div>
+          </div>
+        } @empty {
+          <p class="muted agenda-empty">{{ loading() ? 'Loading…' : 'No mail plans yet. Create one to schedule mails.' }}</p>
+        }
+      </aside>
+    </div>
+  }
+
+  <!-- ================= MY REMINDERS (receiver) ================= -->
+  @if (tab() === 'reminders') {
+    <section class="filter-strip" role="tablist" aria-label="Filter reminders">
+      @for (f of reminderFilters; track f) {
+        <button type="button" role="tab" class="filter-pill" [class.active]="reminderFilter() === f"
+                [attr.aria-selected]="reminderFilter() === f" (click)="reminderFilter.set(f)">
+          {{ f }} <span class="count">{{ reminderCounts()[f] ?? 0 }}</span>
+        </button>
+      }
+    </section>
+
+    <div class="mp-layout">
+      <section class="inbox">
+        @for (m of visibleReceived(); track m.id) {
+          <article class="mp-card mail-card" [class.done]="m.status === 'Done'" [class.due]="m.status === 'Due today'">
+            <div class="mail-head">
+              <span class="mail-avatar"><mat-icon>{{ m.status === 'Done' ? 'mark_email_read' : 'mail' }}</mat-icon></span>
+              <div class="mail-title">
+                <h3>{{ m.subject }}</h3>
+                <span class="muted">{{ m.from }} · received {{ m.receivedAt | date: 'MMM d, h:mm a' }}</span>
+              </div>
+              <span [class]="'status-pill ' + statusClass(m.status)">{{ m.status }}</span>
+            </div>
+
+            @let mailKey = 'r' + m.id;
+            @if (expanded().has(mailKey) && bodies().get(mailKey); as body) {
+              <app-rich-text-view class="mail-body" [html]="body" />
+            } @else {
+              <p class="mail-body" [class.clamped]="!expanded().has(mailKey)">{{ m.preview }}</p>
+            }
+            @if (isLong(m.preview, m.images)) {
+              <button type="button" class="body-toggle" (click)="toggleBody(mailKey, mailBody(m))">
+                {{ expanded().has(mailKey) ? 'Show less' : 'Read full message' }}
+              </button>
+            }
+
+            @if (m.eventAt) {
+            @let left = daysUntil(m.eventAt);
+            <div class="mail-event">
+              <div class="date-badge">
+                <span class="m">{{ m.eventAt | date: 'MMM' }}</span>
+                <span class="d">{{ m.eventAt | date: 'd' }}</span>
+              </div>
+              <div class="event-lines">
+                <strong>{{ m.event }}</strong>
+                <span><mat-icon>schedule</mat-icon>{{ m.eventAt | date: 'EEE, h:mm a' }}
+                  <span class="countdown" [class.soon]="left <= 1">
+                    {{ left === 0 ? 'today' : left === 1 ? 'tomorrow' : 'in ' + left + ' days' }}
+                  </span>
+                </span>
+                @if (m.venue) { <span><mat-icon>place</mat-icon>{{ m.venue }}</span> }
+              </div>
+            </div>
+            } @else if (m.event) {
+              <div class="todo-line"><mat-icon>event</mat-icon>{{ m.event }}</div>
+            }
+
+            <div class="mail-plan">
+              @if (m.remindAt && m.status !== 'Done') {
+                <div class="remind-line">
+                  <mat-icon>alarm_on</mat-icon>
+                  <span>Remind me <strong>{{ m.remindAt | date: 'EEE, MMM d · h:mm a' }}</strong></span>
+                  <span class="spacer"></span>
+                  <button type="button" class="ev-btn sm" (click)="snooze(m)" [disabled]="busy()"><mat-icon>snooze</mat-icon> Snooze</button>
+                  <button type="button" class="ev-btn sm done" (click)="markDone(m)" [disabled]="busy()"><mat-icon>check</mat-icon> Done</button>
+                  <button mat-icon-button (click)="clearReminder(m)" [disabled]="busy()" aria-label="Clear reminder" matTooltip="Clear reminder">
+                    <mat-icon>alarm_off</mat-icon>
+                  </button>
+                </div>
+              } @else if (m.status === 'Done') {
+                <div class="remind-line done-line">
+                  <mat-icon>verified</mat-icon><span>Planned and done</span>
+                  <span class="spacer"></span>
+                  <button mat-button (click)="clearReminder(m)" [disabled]="busy()">Plan again</button>
+                </div>
+              } @else {
+                <div class="plan-prompt"><mat-icon>lightbulb</mat-icon> When should we remind you about this mail?</div>
+                <div class="quick-plans">
+                  @for (q of quickPlansFor(m); track q.label) {
+                    <button type="button" class="quick-chip" (click)="planReminder(m, q.pick(m))" [disabled]="busy()">
+                      <mat-icon>{{ q.icon }}</mat-icon>{{ q.label }}
+                    </button>
+                  }
+                  <label class="quick-chip custom">
+                    <mat-icon>edit_calendar</mat-icon>
+                    <input type="datetime-local" aria-label="Custom reminder time" #custom
+                           (change)="planCustom(m, custom.value)" />
+                  </label>
+                </div>
+              }
+            </div>
+          </article>
+        } @empty {
+          <div class="mp-card empty-state">
+            <mat-icon>inbox</mat-icon>
+            <p>{{ loading() ? 'Loading your mails…' : received().length ? 'No mails in "' + reminderFilter() + '".' : 'Mails sent to you from mail plans appear here.' }}</p>
+          </div>
+        }
+      </section>
+
+      <aside class="mp-card agenda">
+        <div class="card-head"><h2>Coming up</h2><mat-icon class="muted">event_note</mat-icon></div>
+        @for (m of agenda(); track m.id) {
+          <div class="agenda-item" [class.today]="isToday(m.remindAt!)">
+            <div class="agenda-when">
+              <span class="ad">{{ isToday(m.remindAt!) ? 'Today' : (m.remindAt! | date: 'EEE d') }}</span>
+              <span class="at">{{ m.remindAt! | date: 'h:mm a' }}</span>
+            </div>
+            <div class="agenda-what">
+              <strong>{{ m.subject }}</strong>
+              <span class="muted">{{ m.event ?? m.from }}</span>
+            </div>
+          </div>
+        } @empty {
+          <p class="muted agenda-empty">No reminders planned yet.</p>
+        }
+        <div class="agenda-tip">
+          <mat-icon>tips_and_updates</mat-icon>
+          <span>Reminders arrive by your preferred channel (Email / Viber) at the time you pick.</span>
+        </div>
+      </aside>
+    </div>
+  }
+</div>

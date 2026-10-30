@@ -58,7 +58,8 @@ public class EmailService
         IReadOnlyCollection<string> cc, string subject, string htmlBody,
         byte[]? inlineQrPng = null, string cid = "qrcode",
         IReadOnlyDictionary<string, byte[]>? inlineImages = null,
-        IReadOnlyList<EmailAttachment>? attachments = null, bool includeDefaultCc = false)
+        IReadOnlyList<EmailAttachment>? attachments = null, bool includeDefaultCc = false,
+        IReadOnlyCollection<string>? bcc = null)
     {
         var msg = new MimeMessage();
         msg.From.Add(new MailboxAddress(_s.FromName, FromAddress));
@@ -68,6 +69,14 @@ public class EmailService
             var mailbox = MailboxAddress.Parse(address);
             if (recipients.Add(mailbox.Address)) msg.To.Add(mailbox);
         }
+        foreach (var address in bcc ?? Array.Empty<string>())
+        {
+            var mailbox = MailboxAddress.Parse(address);
+            if (recipients.Add(mailbox.Address)) msg.Bcc.Add(mailbox);
+        }
+        // Bulk mail: receivers only see that it went to a list, not each other's addresses.
+        if (msg.To.Count == 0 && (msg.Bcc.Count > 0 || (bcc is not null && cc.Count > 0)))
+            msg.To.Add(new GroupAddress("Undisclosed recipients"));
         if (msg.To.Count == 0) throw new ArgumentException("Add at least one To recipient.");
         var copies = includeDefaultCc ? cc.Concat(await _settings.GetEmailCcAsync()) : cc;
         foreach (var address in copies)
@@ -131,7 +140,30 @@ public class EmailService
     {
         var msg = await BuildMessageAsync(to, cc, subject, htmlBody,
             inlineQrPng, cid, inlineImages, attachments, includeDefaultCc);
-        var toHeader = string.Join(", ", msg.To.Mailboxes.Select(m => m.Address));
+        return await TransmitAsync(msg, subject, htmlBody, inlineQrPng, inlineImages, attachments);
+    }
+
+    /// <summary>
+    /// One message to many receivers, each hidden from the others (BCC). CC addresses appear in the
+    /// Cc header; with deliverCc false they are shown but not sent a copy (already sent one).
+    /// </summary>
+    public virtual async Task<EmailDeliveryStatus> SendBccAsync(IReadOnlyCollection<string> bcc, string subject,
+        string htmlBody, IReadOnlyDictionary<string, byte[]>? inlineImages = null,
+        IReadOnlyCollection<string>? cc = null, bool deliverCc = true)
+    {
+        var msg = await BuildMessageAsync(Array.Empty<string>(), cc ?? Array.Empty<string>(), subject, htmlBody,
+            inlineImages: inlineImages, bcc: bcc);
+        var envelope = deliverCc ? null : msg.Bcc.Mailboxes.ToList();
+        return await TransmitAsync(msg, subject, htmlBody, null, inlineImages, null, envelope);
+    }
+
+    // envelope: the addresses SMTP delivers to, when not everyone in the headers should get a copy.
+    private async Task<EmailDeliveryStatus> TransmitAsync(MimeMessage msg, string subject, string htmlBody,
+        byte[]? inlineQrPng, IReadOnlyDictionary<string, byte[]>? inlineImages, IReadOnlyList<EmailAttachment>? attachments,
+        IReadOnlyList<MailboxAddress>? envelope = null)
+    {
+        var toHeader = string.Join(", ", msg.To.Mailboxes.Select(m => m.Address)
+            .Concat(msg.Bcc.Mailboxes.Select(m => "bcc:" + m.Address)));
         var ccHeader = msg.Cc.Mailboxes.Select(m => m.Address).ToList();
         if (_s.Enabled)
         {
@@ -140,11 +172,12 @@ public class EmailService
                 using var client = new SmtpClient { Timeout = 60_000 };
                 await client.ConnectAsync(_s.Host, _s.Port, SecureSocketOptions.StartTls);
                 await client.AuthenticateAsync(_s.User, _s.Password);
-                await client.SendAsync(msg);
+                if (envelope is null) await client.SendAsync(msg);
+                else await client.SendAsync(msg, msg.From.Mailboxes.First(), envelope);
                 // A failed QUIT does not undo a message already accepted by SMTP.
                 try { await client.DisconnectAsync(true); }
                 catch (Exception ex) { _log.LogWarning(ex, "SMTP disconnect failed after delivery was accepted."); }
-                _log.LogInformation("Sent email to {Count} recipient(s) ('{Subject}').", msg.To.Count + msg.Cc.Count, subject);
+                _log.LogInformation("Sent email to {Count} recipient(s) ('{Subject}').", msg.To.Mailboxes.Count() + msg.Cc.Count + msg.Bcc.Count, subject);
                 return EmailDeliveryStatus.Sent;
             }
             catch (Exception ex)
@@ -156,7 +189,7 @@ public class EmailService
         // Preserve the complete MIME message (including actual To/CC and CID images)
         // for administrator inspection or later delivery when SMTP is unavailable.
         await msg.WriteToAsync(Path.Combine(_outboxDir, Guid.NewGuid().ToString("N") + ".eml"));
-        _log.LogWarning("Saved queued email for {Count} recipient(s) to outbox.", msg.To.Count + msg.Cc.Count);
+        _log.LogWarning("Saved queued email for {Count} recipient(s) to outbox.", msg.To.Mailboxes.Count() + msg.Cc.Count + msg.Bcc.Count);
         return EmailDeliveryStatus.Queued;
     }
 

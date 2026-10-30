@@ -701,6 +701,89 @@ export interface ContactDto {
   organization: string | null;
 }
 
+// ---- Mail planner ----
+export type MailKind = 'Reminder' | 'Announcement' | 'Follow-up';
+export type MailChannel = 'Email' | 'Viber' | 'Both';
+export type MailSendStatus = 'Scheduled' | 'Sending' | 'Sent' | 'Queued' | 'Failed';
+
+export interface MailPlanSendDto {
+  id: number;
+  sendAt: string;
+  subject: string;
+  previewText: string;
+  imageCount: number;
+  // Only when one plan is opened for editing.
+  bodyHtml: string | null;
+  status: MailSendStatus;
+  sentAt: string | null;
+  recipientCount: number;
+  lastError: string | null;
+  attempts: number;
+  nextAttemptAt: string;
+}
+
+export interface MailPlanDto {
+  id: number;
+  kind: MailKind;
+  eventId: number | null;
+  eventName: string | null;
+  channel: MailChannel;
+  draft: boolean;
+  groupIds: string[];
+  emails: string[];
+  cc: string[];
+  createdAt: string;
+  updatedAt: string;
+  version: string;
+  sends: MailPlanSendDto[];
+}
+
+export interface MailPlanSaveRequest {
+  kind: MailKind;
+  eventName: string | null;
+  channel: MailChannel;
+  draft: boolean;
+  groupIds: string[];
+  emails: string[];
+  cc: string[];
+  // id = an existing Scheduled day; bodyHtml is XHTML from the editor.
+  sends: { id: number | null; sendAt: string; subject: string; bodyHtml: string }[];
+  version: string | null;
+}
+
+/** A saved receiver list, resolved from users, organizations, levels or event registrants. */
+export interface MailAudienceGroup {
+  id: string;
+  name: string;
+  icon: string;
+  emails: string[];
+}
+
+export interface MailPlanOptions {
+  events: string[];
+  savedEvents: string[];
+  groups: MailAudienceGroup[];
+  // CC addresses saved for the CC dropdown.
+  savedCc: string[];
+}
+
+/** A mail-plan mail the signed-in user received, with the reminder they set. */
+export interface InboxMailDto {
+  id: number;
+  from: string;
+  subject: string;
+  previewText: string;
+  imageCount: number;
+  receivedAt: string;
+  kind: MailKind;
+  event: string | null;
+  eventAt: string | null;
+  venue: string | null;
+  remindAt: string | null;
+  snoozed: boolean;
+  done: boolean;
+}
+
 export type MobileProvider = 'Viber' | 'Sms';
 
 export interface AppSettingsDto {

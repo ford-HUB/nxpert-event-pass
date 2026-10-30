@@ -1,0 +1,33 @@
+<div class="message-box" [class.invalid]="invalid">
+  <div class="format-toolbar" role="toolbar" [attr.aria-label]="label + ' formatting'" (mousedown)="$event.preventDefault()">
+    <button type="button" mat-icon-button aria-label="Bold" matTooltip="Bold" (click)="format('bold')"><mat-icon>format_bold</mat-icon></button>
+    <button type="button" mat-icon-button aria-label="Italic" matTooltip="Italic" (click)="format('italic')"><mat-icon>format_italic</mat-icon></button>
+    <button type="button" mat-icon-button aria-label="Underline" matTooltip="Underline" (click)="format('underline')"><mat-icon>format_underlined</mat-icon></button>
+    <span class="toolbar-sep" aria-hidden="true"></span>
+    <button type="button" mat-icon-button aria-label="Bullet list" matTooltip="Bullet list" (click)="format('insertUnorderedList')"><mat-icon>format_list_bulleted</mat-icon></button>
+    <button type="button" mat-icon-button aria-label="Numbered list" matTooltip="Numbered list" (click)="format('insertOrderedList')"><mat-icon>format_list_numbered</mat-icon></button>
+    <span class="toolbar-sep" aria-hidden="true"></span>
+    <button type="button" mat-icon-button aria-label="Insert link" matTooltip="Insert link" (click)="linkOpen = !linkOpen"><mat-icon>link</mat-icon></button>
+    <button type="button" mat-icon-button aria-label="Insert inline image" matTooltip="Insert image" [disabled]="processing()" (click)="imageInput.click()"><mat-icon>add_photo_alternate</mat-icon></button>
+    <input #imageInput type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden (change)="imagePicked($event)" />
+  </div>
+  @if (linkOpen) {
+    <div class="link-row">
+      <input aria-label="Link URL" placeholder="https://example.com" [(ngModel)]="linkUrl"
+             (keydown.enter)="insertLink(); $event.preventDefault()" />
+      <button type="button" mat-stroked-button (click)="insertLink()">Insert link</button>
+    </div>
+  }
+  <div #editor class="message-editor" contenteditable="true" role="textbox" [attr.aria-label]="label"
+       aria-multiline="true" [attr.aria-invalid]="invalid" [attr.data-placeholder]="placeholder"
+       (keyup)="rememberSelection()" (mouseup)="rememberSelection()" (blur)="rememberSelection()"
+       (input)="rememberSelection(); changed()" (paste)="paste($event)" (drop)="$event.preventDefault()"></div>
+</div>
+<div class="editor-foot">
+  <span class="hint">
+    {{ processing() ? 'Preparing image…' : 'Images: up to 5, 2 MB each and 5 MB total after resizing. Pasted text keeps its images and basic formatting.' }}
+  </span>
+  @if (maxLength) {
+    <span class="hint counter" [class.over]="textLength() > maxLength">{{ textLength() }} / {{ maxLength }}</span>
+  }
+</div>

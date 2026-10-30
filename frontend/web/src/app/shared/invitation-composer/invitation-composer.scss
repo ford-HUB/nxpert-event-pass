@@ -45,30 +45,191 @@ p.muted { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; }
 
 .schedule-controls { display: grid; gap: 10px; padding: 12px; border: $hairline-teal; border-radius: 12px; background: $soft-surface; }
 .schedule-toggle { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.email-history { margin-top: 28px; padding-top: 22px; border-top: $hairline-teal; }
-.history-toolbar, .history-detail-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.history-list { display: grid; gap: 10px; max-height: 600px; overflow: auto; }
-.history-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border: $hairline-teal; border-radius: 12px; padding: 14px; }
-.history-content { min-width: 0; flex: 1; }
-.history-subject { border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600; color: #0f766e; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-.history-recipients { overflow-wrap: anywhere; font-size: 13px; margin: 6px 0; }
-.history-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.email-status { padding: 4px 10px; background: #eef2ff; color: #3730a3; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.schedule-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  mat-form-field { flex: 0 1 360px; min-width: 0; }
+  .schedule-field input { cursor: pointer; }
+  button { color: #0f766e; }
+}
+.schedule-error { margin: -6px 0 0; color: #b91c1c; font-size: 12px; }
+// ---- Email history ----
+.email-history { margin-top: 20px; padding-top: 14px; border-top: $hairline-teal; }
+
+.history-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+.history-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  padding: 4px 6px 4px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover { background: $soft-surface; }
+  &:focus-visible { outline: 2px solid rgba(13, 148, 136, 0.45); }
+}
+
+.history-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e6f6f3;
+  color: #0f766e;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.history-chevron {
+  flex: none;
+  color: #64748b;
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+
+  &.open { transform: none; }
+}
+
+.history-filter {
+  --mat-standard-button-toggle-height: 30px;
+  border-radius: 999px !important;
+  overflow: hidden;
+  font-size: 12.5px;
+
+  ::ng-deep .mat-button-toggle-label-content { padding: 0 12px; font-weight: 600; }
+}
+
+.spinning mat-icon { animation: history-spin 0.9s linear infinite; }
+@keyframes history-spin { to { transform: rotate(360deg); } }
+
+#email-history-panel { margin-top: 10px; }
+
+.history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: $soft-surface;
+  color: #64748b;
+  font-size: 13px;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.history-list {
+  max-height: 420px;
+  overflow: auto;
+  border: $hairline-teal;
+  border-radius: 10px;
+}
+
+.history-item {
+  border-top: $hairline-teal;
+
+  &:first-child { border-top: 0; }
+  &.open { background: $soft-surface; }
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: $soft-surface; }
+  &:disabled { cursor: default; }
+  &:focus-visible { outline: 2px solid rgba(13, 148, 136, 0.45); outline-offset: -2px; }
+  .history-chevron { font-size: 20px; width: 20px; height: 20px; }
+}
+
+.history-content { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.history-subject, .history-recipients { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-subject { flex: 0 1 auto; max-width: 55%; font-weight: 600; color: #0f766e; }
+.history-recipients { flex: 1 1 0; font-size: 12.5px; color: #64748b; }
+.history-date { font-size: 12px; color: #64748b; white-space: nowrap; }
+
+.email-status { justify-self: start; padding: 2px 8px; background: #eef2ff; color: #3730a3; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .email-sent { background: #dcfce7; color: #166534; }
 .email-failed { background: #fff7ed; color: #9a3412; }
-.history-error { color: #9a3412; font-size: 13px; overflow-wrap: anywhere; }
-.history-empty { padding: 24px; text-align: center; background: $soft-surface; border-radius: 12px; }
-.history-detail { margin-top: 18px; border: $hairline-teal; border-radius: 12px; padding: 18px; }
-.history-body { overflow-wrap: anywhere; border-block: $hairline-teal; padding-block: 16px; margin-block: 14px; max-height: 500px; overflow: auto; }
-.history-detail-actions { justify-content: flex-start; }
-:host ::ng-deep .history-body img { max-width: 100%; height: auto; }
-@media (max-width: 600px) { .history-row { flex-direction: column; } .history-actions { flex-direction: row; align-items: center; } }
+.email-cancelled { background: #f1f5f9; color: #64748b; }
+.history-error { margin: 0 0 8px; color: #9a3412; font-size: 12.5px; overflow-wrap: anywhere; }
+.row-error { margin: -4px 12px 8px 106px; }
+
+.history-detail { padding: 2px 12px 12px 106px; }
+
+.history-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0 0 8px;
+  font-size: 12.5px;
+
+  dt { color: #64748b; font-weight: 600; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+}
+
+.history-body {
+  max-height: 280px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: $hairline-teal;
+  border-radius: 8px;
+  background: #fff;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.history-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+
+  .hint { flex: 1 1 220px; margin: 0; }
+}
+
+:host ::ng-deep .history-body {
+  img { max-width: 100%; height: auto; }
+  p, div { margin: 0 0 6px; }
+}
+
+@media (max-width: 600px) {
+  .history-row { grid-template-columns: minmax(0, 1fr) auto 20px; gap: 4px 10px; }
+  .history-row .email-status { grid-row: 2; grid-column: 1; }
+  .history-content { grid-row: 1; grid-column: 1 / -1; flex-direction: column; gap: 2px; }
+  .history-subject { max-width: 100%; }
+  .history-recipients { flex: none; max-width: 100%; }
+  .history-date { grid-row: 2; grid-column: 2; }
+  .history-row .history-chevron { grid-row: 2; grid-column: 3; }
+  .history-detail { padding-left: 12px; }
+  .row-error { margin-left: 12px; }
+}
 
 mat-chip-row { max-width: 100%; }
 .group-chip { --mdc-chip-elevated-container-color: #e6f6f3; --mat-chip-elevated-container-color: #e6f6f3; font-weight: 700; }
 
-.contact-name { font-weight: 600; color: #0f172a; }
-.contact-meta { margin-left: 8px; color: var(--mat-sys-on-surface-variant); font-size: 13px; }
+.saved-option ::ng-deep .mdc-list-item__primary-text { display: flex; align-items: center; gap: 8px; width: 100%; }
+.saved-address { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.forget-address { flex: none; color: var(--mat-sys-on-surface-variant); }
 
 // ---- Message editor ----
 .message-box {
@@ -87,6 +248,7 @@ mat-chip-row { max-width: 100%; }
   background: $soft-surface;
 
   button { color: #0f766e; }
+  .token-button { height: 30px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; }
 }
 
 .toolbar-sep {
@@ -346,5 +508,4 @@ mat-chip-row { max-width: 100%; }
 
 @media (max-width: 600px) {
   .message-editor { padding: 12px; }
-  .contact-meta { display: block; margin-left: 0; font-size: 12.5px; }
 }

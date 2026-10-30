@@ -4,8 +4,8 @@
       <div>
         <h3>{{ editingEmail ? 'Edit scheduled email' : 'Compose invitation' }}</h3>
         <p class="muted">
-          Pick system users or type email addresses. Use <strong>&#64;n-pax</strong> to include all
-          {{ directoryCount }} system users.
+          Type email addresses, separated by commas (e.g. ana&#64;gmail.com, ben&#64;gmail.com). Addresses you
+          send to are saved for next time. Use <strong>&#64;n-pax</strong> to include all {{ directoryCount }} system users.
         </p>
       </div>
       @if (counts.to.length + counts.cc.length > 0) {
@@ -27,18 +27,18 @@
               </mat-chip-row>
             }
             <input [matChipInputFor]="grid" [matAutocomplete]="options" #trigger="matAutocompleteTrigger"
-                   [(ngModel)]="query[field]" [name]="field" placeholder="Name, email, or @n-pax"
+                   [(ngModel)]="query[field]" [name]="field" inputmode="email" autocomplete="off"
+                   placeholder="email@gmail.com, email@gmail.com"
                    (keydown)="key($event, field, trigger)" (paste)="pasteRecipients($event, field)"
                    [disabled]="sending()" />
           </mat-chip-grid>
+          <!-- Only addresses this admin saved before, and only once they start typing. -->
           <mat-autocomplete #options="matAutocomplete" (optionSelected)="add(field, $event.option.value)">
-            @if (showGroup(field)) {
-              <mat-option [value]="allUsers"><strong>&#64;n-pax</strong> · All system users ({{ directoryCount }})</mat-option>
-            }
-            @for (contact of suggestions(field); track contact.id) {
-              <mat-option [value]="contact.email">
-                <span class="contact-name">{{ contact.fullName }}</span>
-                <span class="contact-meta">{{ contact.email }}@if (contact.organization) { · {{ contact.organization }} }</span>
+            @for (address of suggestions(field); track address) {
+              <mat-option [value]="address" class="saved-option">
+                <span class="saved-address">{{ address }}</span>
+                <button type="button" mat-icon-button class="forget-address" [attr.aria-label]="'Forget ' + address"
+                        matTooltip="Remove from saved" (click)="forgetAddress($event, address)"><mat-icon>close</mat-icon></button>
               </mat-option>
             }
           </mat-autocomplete>
@@ -56,11 +56,31 @@
           Schedule for later
         </label>
         @if (scheduleEnabled) {
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Send date and time (Philippine time)</mat-label>
-            <input matInput type="datetime-local" [(ngModel)]="scheduleAt" [disabled]="sending()" required />
-          </mat-form-field>
-          <p class="hint">Philippine time (UTC+8). The server sends automatically, even when this page is closed.</p>
+          @for (value of scheduleAt; track $index; let i = $index) {
+            <div class="schedule-row">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="schedule-field">
+                <mat-label>Send date and time{{ scheduleAt.length > 1 ? ' #' + (i + 1) : '' }} (Philippine time)</mat-label>
+                <input matInput readonly [value]="scheduleLabel(value)" placeholder="Choose a day and time"
+                       [disabled]="sending()" required [attr.aria-invalid]="!!scheduleIssue(i)"
+                       (click)="pickSchedule(i)" (keydown.enter)="pickSchedule(i)" (keydown.space)="pickSchedule(i); $event.preventDefault()" />
+                <button type="button" mat-icon-button matSuffix aria-label="Choose day and time" (click)="pickSchedule(i)"
+                        [disabled]="sending()"><mat-icon>event</mat-icon></button>
+              </mat-form-field>
+              @if (scheduleAt.length > 1) {
+                <button type="button" mat-icon-button aria-label="Remove this date" matTooltip="Remove this date"
+                        (click)="removeSchedule(i)" [disabled]="sending()"><mat-icon>remove_circle_outline</mat-icon></button>
+              }
+              @if (i === scheduleAt.length - 1 && scheduleAt.length < maxSchedules) {
+                <button type="button" mat-icon-button aria-label="Add another day" matTooltip="Add another day (next day, same time)"
+                        (click)="addSchedule()" [disabled]="sending()"><mat-icon>add_circle_outline</mat-icon></button>
+              }
+            </div>
+            @if (scheduleIssue(i); as issue) { <p class="schedule-error" role="alert">{{ issue }}</p> }
+          }
+          <p class="hint">
+            Philippine time (UTC+8). Each date sends its own copy of this email. The server sends automatically, even when
+            this page is closed.
+          </p>
         }
       </div>
 
@@ -76,6 +96,13 @@
           <button type="button" mat-icon-button aria-label="Insert link" matTooltip="Insert link" (click)="linkOpen = !linkOpen"><mat-icon>link</mat-icon></button>
           <button type="button" mat-icon-button aria-label="Insert inline image" matTooltip="Insert image" [disabled]="processingImage()" (click)="imageInput.click()"><mat-icon>add_photo_alternate</mat-icon></button>
           <input #imageInput type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden (change)="imagePicked($event)" />
+          @if (canUseScheduleDay) {
+            <span class="toolbar-sep" aria-hidden="true"></span>
+            <button type="button" mat-stroked-button class="token-button" (click)="insertScheduleDay()"
+                    matTooltip="Replaced with each email's send day, e.g. Friday, October 30, 2026">
+              <mat-icon>today</mat-icon>Send day
+            </button>
+          }
         </div>
         @if (linkOpen) {
           <div class="link-row">
@@ -91,8 +118,15 @@
              (paste)="pasteBody($event)" (drop)="$event.preventDefault()" (input)="syncPreview()"></div>
       </div>
       <p class="hint">
-        {{ processingImage() ? 'Preparing image…' : 'Images: up to 5, 2 MB each and 5 MB total after resizing. Pasted text arrives plain — format it with the toolbar.' }}
+        {{ processingImage() ? 'Preparing image…' : 'Images: up to 5, 2 MB each and 5 MB total after resizing. Pasted text keeps its images and basic formatting.' }}
       </p>
+      @if (hasScheduleDay()) {
+        <p class="hint" [class.schedule-error]="!canUseScheduleDay">
+          {{ canUseScheduleDay
+            ? scheduleDayToken + ' becomes the send day of each email, e.g. Friday, October 30, 2026.'
+            : scheduleDayToken + ' only works when scheduling on two or more dates. Remove it or add another date.' }}
+        </p>
+      }
     </fieldset>
   </div>
 
@@ -165,6 +199,7 @@
     <button mat-flat-button color="primary" class="full-width" (click)="send()" [disabled]="sending() || processingImage()">
       <mat-icon>{{ scheduleEnabled ? 'schedule_send' : 'send' }}</mat-icon>
       {{ editingEmail ? (scheduleEnabled ? 'Save schedule changes' : 'Save and send now') : (scheduleEnabled ? 'Schedule invitations' : 'Send invitations') }}
+      {{ scheduleEnabled && scheduleAt.length > 1 ? '(' + scheduleAt.length + ' dates)' : '' }}
     </button>
     @if (editingEmail) {
       <button mat-stroked-button class="full-width" (click)="resetDraft()" [disabled]="sending()">Discard edits</button>
@@ -173,83 +208,92 @@
   </aside>
 </div>
 
+<!-- Email history: one header line (title, filter, refresh, collapse) and dense one-line rows;
+     a row expands in place to show the full email and its actions. -->
 <section class="email-history" aria-label="Email history">
-  <div class="history-toolbar">
-    <div>
+  <div class="history-head">
+    <button type="button" class="history-title" (click)="toggleHistory()" [attr.aria-expanded]="historyVisible"
+            aria-controls="email-history-panel">
+      <mat-icon class="history-chevron" [class.open]="historyVisible">expand_more</mat-icon>
       <h3>Email history</h3>
-      <p class="muted">Scheduled and sent invitations for this event. All dates are in Philippine time (UTC+8).</p>
-    </div>
-    <button mat-stroked-button (click)="toggleHistory()" [attr.aria-expanded]="historyVisible">
-      <mat-icon>{{ historyVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
-      {{ historyVisible ? 'Hide emails' : 'Show emails' }}
+      <span class="history-count">{{ history().length }}</span>
     </button>
+    @if (historyVisible) {
+      <mat-button-toggle-group class="history-filter" [(ngModel)]="historyFilter" hideSingleSelectionIndicator
+                               aria-label="Show emails">
+        <mat-button-toggle value="All">All {{ historyCount('All') }}</mat-button-toggle>
+        <mat-button-toggle value="Scheduled" matTooltip="Scheduled, sending, queued and failed emails not yet sent">
+          Scheduled {{ historyCount('Scheduled') }}
+        </mat-button-toggle>
+        <mat-button-toggle value="Sent">Sent {{ historyCount('Sent') }}</mat-button-toggle>
+      </mat-button-toggle-group>
+      <button mat-icon-button aria-label="Refresh email history" matTooltip="Refresh" (click)="loadHistory()"
+              [disabled]="historyLoading()" [class.spinning]="historyLoading()"><mat-icon>refresh</mat-icon></button>
+    }
   </div>
+
   @if (historyVisible) {
-    <div class="history-toolbar">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Show emails</mat-label>
-        <mat-select [(ngModel)]="historyFilter">
-          <mat-option value="All">All emails</mat-option>
-          <mat-option value="Scheduled">Scheduled</mat-option>
-          <mat-option value="Sent">Sent</mat-option>
-        </mat-select>
-      </mat-form-field>
-      <button mat-button (click)="loadHistory()" [disabled]="historyLoading()"><mat-icon>refresh</mat-icon>Refresh</button>
-    </div>
-    @if (historyError()) { <p role="alert" class="history-error">{{ historyError() }}</p> }
-    @if (historyLoading()) { <p class="hint" role="status">Loading email history…</p> }
-    @if (historyFilter === 'Scheduled') {
-      <p class="hint">Includes scheduled, sending, queued and failed emails that have not been sent.</p>
-    }
-    @if (!historyLoading() && !historyError() && !filteredHistory.length) {
-      <p class="history-empty">No {{ historyFilter === 'All' ? '' : historyFilter.toLowerCase() + ' ' }}emails yet.</p>
-    }
-    <div class="history-list">
-      @for (email of filteredHistory; track email.id) {
-        <article class="history-row">
-          <div class="history-content">
-            <button type="button" class="history-subject" (click)="openEmail(email)" [disabled]="openingEmail() || sending()">{{ email.subject }}</button>
-            <p class="history-recipients">To: {{ email.to.join(', ') }}@if (email.cc.length) { · CC: {{ email.cc.join(', ') }} }</p>
-            <p class="hint">
-              Created {{ email.createdAt | date: 'MMM d, y, h:mm a' : '+0800' }}
-              @if (email.scheduledAt) { · Scheduled {{ email.scheduledAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
-              @if (email.sentAt) { · Sent {{ email.sentAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
-              @if (email.status === 'Queued') { · Next attempt {{ email.nextAttemptAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
-            </p>
-            @if (email.lastError) { <p class="history-error">{{ email.lastError }}</p> }
-          </div>
-          <div class="history-actions">
-            <span class="email-status" [class.email-sent]="email.status === 'Sent'" [class.email-failed]="email.status === 'Failed' || email.status === 'Queued'">{{ email.status }}</span>
-            <button mat-button (click)="openEmail(email)" [disabled]="openingEmail() || sending()">Open{{ canEdit(email) ? ' / edit' : '' }}</button>
-          </div>
-        </article>
+    <div id="email-history-panel">
+      @if (historyError()) { <p role="alert" class="history-error">{{ historyError() }}</p> }
+      @if (!historyLoading() && !historyError() && !filteredHistory.length) {
+        <p class="history-empty"><mat-icon>inbox</mat-icon>No {{ historyFilter === 'All' ? '' : historyFilter.toLowerCase() + ' ' }}emails yet.</p>
       }
-    </div>
-    @if (openingEmail()) { <p role="status">Opening email…</p> }
-    @if (openedEmail(); as email) {
-      <article class="history-detail">
-        <div class="history-toolbar">
-          <h3>{{ email.subject }}</h3>
-          <button mat-icon-button aria-label="Close email" (click)="openedEmail.set(null)"><mat-icon>close</mat-icon></button>
-        </div>
-        <p><strong>Status:</strong> {{ email.status }}</p>
-        <p class="history-recipients"><strong>To:</strong> {{ email.to.join(', ') }}</p>
-        @if (email.cc.length) { <p class="history-recipients"><strong>CC:</strong> {{ email.cc.join(', ') }}</p> }
-        <p class="hint">Created {{ email.createdAt | date: 'MMM d, y, h:mm a' : '+0800' }} · Updated {{ email.updatedAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p>
-        @if (email.scheduledAt) { <p><strong>Scheduled:</strong> {{ email.scheduledAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p> }
-        @if (email.sentAt) { <p><strong>Sent:</strong> {{ email.sentAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p> }
-        @if (email.lastError) { <p class="history-error">{{ email.lastError }}</p> }
-        <div #historyBody class="history-body" (click)="$event.preventDefault()"></div>
-        <p class="hint">The event information and calendar invitation are appended when this email is sent.</p>
-        <div class="history-detail-actions">
-          @if (canEdit(email)) {
-            <button mat-flat-button (click)="editEmail(email)" [disabled]="sending()"><mat-icon>edit</mat-icon>Edit email / schedule</button>
-            <button mat-stroked-button (click)="cancelScheduled(email)" [disabled]="sending()">Cancel email</button>
-          } @else {
-            <button mat-stroked-button (click)="editEmail(email, true)" [disabled]="sending()">Use as new draft</button>
+      @if (filteredHistory.length) {
+        <div class="history-list">
+          @for (email of filteredHistory; track email.id) {
+            <article class="history-item" [class.open]="openedEmail()?.id === email.id">
+              <button type="button" class="history-row" (click)="toggleEmail(email)" [disabled]="openingEmail() || sending()"
+                      [attr.aria-expanded]="openedEmail()?.id === email.id">
+                <span class="email-status" [class.email-sent]="email.status === 'Sent'"
+                      [class.email-failed]="email.status === 'Failed' || email.status === 'Queued'"
+                      [class.email-cancelled]="email.status === 'Cancelled'">{{ email.status }}</span>
+                <span class="history-content">
+                  <span class="history-subject">{{ email.subject }}</span>
+                  <span class="history-recipients">
+                    To: {{ email.to.join(', ') }}@if (email.cc.length) { · CC: {{ email.cc.join(', ') }} }
+                  </span>
+                </span>
+                <span class="history-date" [matTooltip]="'Created ' + (email.createdAt | date: 'MMM d, y, h:mm a' : '+0800') + ' (UTC+8)'">
+                  @if (email.sentAt) { {{ email.sentAt | date: 'MMM d, h:mm a' : '+0800' }} }
+                  @else if (email.status === 'Queued') { Retry {{ email.nextAttemptAt | date: 'MMM d, h:mm a' : '+0800' }} }
+                  @else if (email.scheduledAt) { {{ email.scheduledAt | date: 'MMM d, h:mm a' : '+0800' }} }
+                  @else { {{ email.createdAt | date: 'MMM d, h:mm a' : '+0800' }} }
+                </span>
+                <mat-icon class="history-chevron" [class.open]="openedEmail()?.id === email.id" aria-hidden="true">
+                  {{ openingId === email.id && openingEmail() ? 'hourglass_empty' : 'expand_more' }}
+                </mat-icon>
+              </button>
+              @if (email.lastError && openedEmail()?.id !== email.id) { <p class="history-error row-error">{{ email.lastError }}</p> }
+
+              @if (openedEmail(); as opened) {
+                @if (opened.id === email.id) {
+                  <div class="history-detail">
+                    <dl class="history-meta">
+                      <dt>To</dt><dd>{{ opened.to.join(', ') }}</dd>
+                      @if (opened.cc.length) { <dt>CC</dt><dd>{{ opened.cc.join(', ') }}</dd> }
+                      @if (opened.scheduledAt) { <dt>Scheduled</dt><dd>{{ opened.scheduledAt | date: 'MMM d, y, h:mm a' : '+0800' }}</dd> }
+                      @if (opened.sentAt) { <dt>Sent</dt><dd>{{ opened.sentAt | date: 'MMM d, y, h:mm a' : '+0800' }}</dd> }
+                      <dt>Created</dt>
+                      <dd>{{ opened.createdAt | date: 'MMM d, y, h:mm a' : '+0800' }} · updated {{ opened.updatedAt | date: 'MMM d, y, h:mm a' : '+0800' }}</dd>
+                    </dl>
+                    @if (opened.lastError) { <p class="history-error">{{ opened.lastError }}</p> }
+                    <div #historyBody class="history-body" (click)="$event.preventDefault()"></div>
+                    <div class="history-detail-actions">
+                      <p class="hint">Event details and the calendar invitation are appended when sent. Times are UTC+8.</p>
+                      @if (canEdit(opened)) {
+                        <button mat-stroked-button (click)="cancelScheduled(opened)" [disabled]="sending()">Cancel email</button>
+                        <button mat-flat-button (click)="editEmail(opened)" [disabled]="sending()"><mat-icon>edit</mat-icon>Edit</button>
+                      } @else {
+                        <button mat-stroked-button (click)="editEmail(opened, true)" [disabled]="sending()"><mat-icon>content_copy</mat-icon>Use as new draft</button>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+            </article>
           }
         </div>
-      </article>
-    }
+      }
+    </div>
   }
 </section>

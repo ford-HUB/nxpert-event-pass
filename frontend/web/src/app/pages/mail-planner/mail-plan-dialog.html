@@ -1,0 +1,419 @@
+<div class="pd-head">
+  <span class="pd-head-icon"><mat-icon>schedule_send</mat-icon></span>
+  <div class="pd-head-text">
+    <h2>{{ data.plan ? 'Edit mail plan' : 'Create mail plan' }}</h2>
+    <span class="muted">Pick the days it goes out, write each day's mail, and choose who receives it.</span>
+  </div>
+  <button mat-icon-button mat-dialog-close aria-label="Close"><mat-icon>close</mat-icon></button>
+</div>
+
+<nav class="pd-steps" aria-label="Plan steps">
+  @for (s of steps; track s.label; let i = $index) {
+    <button type="button" class="pd-step" [class.active]="step() === i" [class.done]="step() > i && !hasErrors(i)"
+            [class.invalid]="hasErrors(i)" [attr.aria-current]="step() === i ? 'step' : null" (click)="go(i)">
+      <span class="num">
+        @if (hasErrors(i)) { <mat-icon>priority_high</mat-icon> }
+        @else if (step() > i) { <mat-icon>check</mat-icon> }
+        @else { {{ i + 1 }} }
+      </span>
+      <span class="lbl">{{ s.label }}</span>
+    </button>
+    @if (i < steps.length - 1) { <span class="pd-step-line" [class.filled]="step() > i"></span> }
+  }
+</nav>
+
+<mat-dialog-content class="pd-content" [class.split-scroll]="step() === 1">
+  <!-- ============ 1. DETAILS ============ -->
+  @if (step() === 0) {
+    <div class="details">
+      <div>
+        <div class="field-label">Mail type</div>
+        <div class="kind-picker" role="radiogroup" aria-label="Mail type">
+          @for (k of kinds; track k) {
+            <button type="button" role="radio" class="kind-option" [class.active]="kind === k" [attr.data-kind]="k"
+                    [attr.aria-checked]="kind === k" (click)="kind = k">
+              <mat-icon>{{ kindIcons[k] }}</mat-icon>{{ k }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="event-field">
+          <mat-label>Related event (optional)</mat-label>
+          <mat-icon matPrefix>{{ event.trim() ? 'event' : 'campaign' }}</mat-icon>
+          <input matInput [(ngModel)]="event" [matAutocomplete]="eventAuto" [maxlength]="eventMax"
+                 placeholder="Pick from the list or type a new one" (keydown.enter)="canSaveEvent() && saveEvent()" />
+          @if (event) {
+            <button mat-icon-button matSuffix (click)="event = ''" aria-label="Clear event" matTooltip="Clear (general mail)">
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+          <mat-autocomplete #eventAuto="matAutocomplete" (optionSelected)="pickEvent($event.option.value)">
+            @if (canSaveEvent()) {
+              <mat-option [value]="event.trim()" class="save-option">
+                <mat-icon>playlist_add</mat-icon>Save “{{ event.trim() }}” to the list
+              </mat-option>
+            }
+            <mat-option value=""><mat-icon>campaign</mat-icon>None · general mail</mat-option>
+            @for (e of filteredEvents(); track e) {
+              <mat-option [value]="e">
+                <mat-icon>{{ savedEvents().includes(e) ? 'bookmark' : 'event' }}</mat-icon>{{ e }}
+              </mat-option>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+        <div class="event-hint">
+          @if (canSaveEvent()) {
+            <mat-icon>edit_note</mat-icon>
+            <span>“{{ event.trim() }}” isn't in your list yet.</span>
+            <button type="button" class="save-link" (click)="saveEvent()"><mat-icon>playlist_add</mat-icon> Save to list</button>
+          } @else if (event.trim()) {
+            <mat-icon>check_circle</mat-icon><span>In your event list.</span>
+          } @else {
+            <mat-icon>info</mat-icon><span>Leave empty for a general mail, or type a name and save it for next time.</span>
+          }
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Send through</div>
+        <mat-button-toggle-group [(ngModel)]="channel" class="channel-toggle" aria-label="Channel" hideSingleSelectionIndicator>
+          @for (c of channels; track c) {
+            <mat-button-toggle [value]="c"><mat-icon>{{ channelIcons[c] }}</mat-icon> {{ c }}</mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </div>
+
+      <div class="soft-box compact">
+        <mat-icon>tips_and_updates</mat-icon>
+        <span>Next, pick the target days. Each day gets <strong>its own time, subject and message</strong> — use them for follow-ups and reminders.</span>
+      </div>
+    </div>
+  }
+
+  <!-- ============ 2. DAYS & MESSAGES ============ -->
+  @if (step() === 1) {
+    <div class="pd-grid days-grid">
+      <aside class="pd-col">
+        <div class="month-card">
+          <div class="month-head">
+            <button mat-icon-button (click)="moveMonth(-1)" [disabled]="!canGoBack()" aria-label="Previous month">
+              <mat-icon>chevron_left</mat-icon>
+            </button>
+            <strong>{{ viewMonth() | date: 'MMMM yyyy' }}</strong>
+            <button mat-icon-button (click)="moveMonth(1)" aria-label="Next month"><mat-icon>chevron_right</mat-icon></button>
+          </div>
+          <div class="month-grid">
+            @for (w of weekdays; track w) { <span class="wd">{{ w.charAt(0) }}</span> }
+            @for (c of cells(); track $index) {
+              @if (c) {
+                <button type="button" class="cell" [class.selected]="selectedKeys().has(c.key)" [class.locked]="c.locked"
+                        [class.today]="c.today" [disabled]="c.past || c.locked"
+                        [attr.aria-pressed]="selectedKeys().has(c.key)" (click)="toggleDay(c)"
+                        [matTooltip]="c.locked ? 'Already sent' : ''">
+                  {{ c.date.getDate() }}
+                </button>
+              } @else {
+                <span></span>
+              }
+            }
+          </div>
+          <p class="muted month-hint"><mat-icon>touch_app</mat-icon> Click days to add or remove them.</p>
+        </div>
+
+        <div>
+          <div class="field-label">Quick pick</div>
+          <div class="quick-row">
+            <button type="button" class="quick-chip" (click)="pickNextDays(3)"><mat-icon>looks_3</mat-icon>Next 3 days</button>
+            <button type="button" class="quick-chip" (click)="pickWeekdays()"><mat-icon>work</mat-icon>Weekdays</button>
+            <button type="button" class="quick-chip" (click)="pickWeekly(4)"
+                    matTooltip="Same weekday as the first day, for 4 weeks"><mat-icon>repeat</mat-icon>Weekly × 4</button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="pd-col day-cards">
+        <div class="field-label">
+          Target days <span class="count-pill">{{ lockedSends.length + entries().length }}</span>
+        </div>
+
+        @for (s of lockedSends; track s.id; let i = $index) {
+          <article class="day-card locked">
+            <header class="dc-head">
+              <span class="dc-no">Day {{ i + 1 }}</span>
+              <span class="dc-date">{{ s.at | date: 'EEE, MMM d · h:mm a' }}</span>
+              <span class="spacer"></span>
+              <span class="status-pill" [class.ok]="s.status === 'Sent'" [class.closed]="s.status === 'Failed'"
+                    [class.pending]="s.status === 'Queued'">{{ s.status }}</span>
+            </header>
+            <strong class="dc-locked-subject">{{ s.subject }}</strong>
+            <app-rich-text-view class="dc-locked-body" [html]="s.body" />
+          </article>
+        }
+
+        @for (e of entries(); track e.uid; let i = $index) {
+          <article class="day-card" [class.invalid]="showEntryErrors(e)">
+            <header class="dc-head">
+              <span class="dc-no">Day {{ dayNumber(i) }}</span>
+
+              <div class="stepper" role="group" aria-label="Date">
+                <button type="button" (click)="moveEntry(e, -1)" [disabled]="!canMoveBack(e)" aria-label="One day earlier"
+                        matTooltip="One day earlier"><mat-icon>chevron_left</mat-icon></button>
+                <span class="stepper-value"><mat-icon>event</mat-icon>{{ e.date | date: 'EEE, MMM d' }}</span>
+                <button type="button" (click)="moveEntry(e, 1)" aria-label="One day later"
+                        matTooltip="One day later"><mat-icon>chevron_right</mat-icon></button>
+              </div>
+
+              <div class="stepper" role="group" aria-label="Send time">
+                <button type="button" (click)="bumpTime(e, -30)" aria-label="30 minutes earlier"
+                        matTooltip="−30 min"><mat-icon>remove</mat-icon></button>
+                <input type="time" class="time-input" [(ngModel)]="e.time" aria-label="Send time" />
+                <button type="button" (click)="bumpTime(e, 30)" aria-label="30 minutes later"
+                        matTooltip="+30 min"><mat-icon>add</mat-icon></button>
+              </div>
+
+              <span class="spacer"></span>
+              @if (entries().length > 1) {
+                <button mat-icon-button (click)="applyTimeToAll(e)" aria-label="Use this time for every day"
+                        matTooltip="Use this time for every day"><mat-icon>schedule</mat-icon></button>
+              }
+              @if (i > 0 || lockedSends.length) {
+                <button mat-icon-button (click)="copyPrevious(i)" aria-label="Copy subject and message from the previous day"
+                        matTooltip="Copy previous day's mail"><mat-icon>content_copy</mat-icon></button>
+              }
+              <button mat-icon-button class="remove-btn" (click)="removeEntry(e)" aria-label="Remove this day"
+                      matTooltip="Remove this day"><mat-icon>delete_outline</mat-icon></button>
+            </header>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Subject</mat-label>
+              <input matInput [(ngModel)]="e.subject" [maxlength]="subjectMax"
+                     [placeholder]="i === 0 && !lockedSends.length ? 'e.g. Office closed on Monday' : 'e.g. Reminder: tomorrow is the deadline'" />
+            </mat-form-field>
+
+            <app-rich-text-editor [(value)]="e.body" [maxLength]="bodyMax" label="Message"
+                                  [invalid]="showEntryErrors(e) && !hasBody(e)"
+                                  placeholder="Write the message receivers will read on this day. Insert an image between paragraphs using the image button." />
+
+            @if (showEntryErrors(e)) {
+              <p class="dc-error" role="alert"><mat-icon>error_outline</mat-icon>To finish this day: {{ entryErrors(e).join(', ') }}.</p>
+            }
+          </article>
+        } @empty {
+          <div class="dc-empty">
+            <mat-icon>event_available</mat-icon>
+            <span>Pick days on the calendar, or add the first day below.</span>
+          </div>
+        }
+
+        <button type="button" class="add-day" (click)="addNextDay()">
+          <mat-icon>add_circle</mat-icon>
+          {{ entries().length ? 'Add next day (+1)' : 'Add a day' }}
+        </button>
+      </section>
+    </div>
+  }
+
+  <!-- ============ 3. RECEIVERS ============ -->
+  @if (step() === 2) {
+    <div class="pd-grid wide-side">
+      <section class="pd-col">
+        <div class="field-label">Email addresses</div>
+        <div class="email-entry">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Receiver emails</mat-label>
+            <textarea matInput [(ngModel)]="emailDraft" rows="5" (keydown.control.enter)="addEmails()" (blur)="addEmails()"
+                      placeholder="Paste or type addresses, separated by commas, spaces or new lines"></textarea>
+            <mat-hint>{{ emails().length }} / {{ emailsMax }} added · added automatically when you leave the box</mat-hint>
+          </mat-form-field>
+          <div class="email-entry-actions">
+            @if (emails().length) {
+              <button type="button" class="link-btn" (click)="clearEmails()">Clear all addresses</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="ev-btn solid" (click)="addEmails()" [disabled]="!emailDraft.trim()">
+              <mat-icon>playlist_add</mat-icon> Add to list
+            </button>
+          </div>
+        </div>
+
+        <div class="field-label">CC <span class="optional">optional</span></div>
+        <div class="cc-entry">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>CC addresses</mat-label>
+            <mat-icon matPrefix>forward_to_inbox</mat-icon>
+            <mat-chip-grid #ccGrid aria-label="CC addresses">
+              @for (e of cc(); track e) {
+                <mat-chip-row (removed)="removeCc(e)" [class.saved]="isSavedCc(e)">
+                  @if (isSavedCc(e)) {
+                    <mat-icon matChipAvatar matTooltip="In your saved CC list">bookmark</mat-icon>
+                  }
+                  {{ e }}
+                  <button matChipRemove [attr.aria-label]="'Remove ' + e"><mat-icon>cancel</mat-icon></button>
+                </mat-chip-row>
+              }
+              <input #ccInput [matChipInputFor]="ccGrid" [matAutocomplete]="ccAuto" #ccTrigger="matAutocompleteTrigger"
+                     [(ngModel)]="ccDraft" name="ccDraft" placeholder="Type an address or pick a saved one"
+                     (keydown)="ccKey($event, ccTrigger)" (paste)="pasteCc($event)" />
+            </mat-chip-grid>
+            <mat-autocomplete #ccAuto="matAutocomplete" (optionSelected)="pickCc($event.option.value)">
+              @for (e of ccSuggestions(); track e) {
+                <mat-option [value]="e" class="cc-option">
+                  <mat-icon>bookmark</mat-icon>
+                  <span class="cc-option-text">{{ e }}</span>
+                  <button type="button" class="cc-forget" (click)="forgetCc(e, $event)" (mousedown)="$event.stopPropagation()"
+                          [attr.aria-label]="'Remove ' + e + ' from the saved CC list'" matTooltip="Remove from saved list">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </mat-option>
+              }
+            </mat-autocomplete>
+            <mat-hint>{{ cc().length }} / {{ ccMax }} · Enter, comma or Tab to add · CC is sent by email and visible to receivers</mat-hint>
+          </mat-form-field>
+          <div class="event-hint">
+            @if (unsavedCc().length) {
+              <mat-icon>bookmark_add</mat-icon>
+              <span>{{ unsavedCc().length === 1 ? unsavedCc()[0] + " isn't" : unsavedCc().length + " addresses aren't" }} in your saved CC list.</span>
+              <button type="button" class="save-link" (click)="saveCc(unsavedCc())">
+                <mat-icon>bookmark_add</mat-icon> Save {{ unsavedCc().length === 1 ? 'to list' : 'all to list' }}
+              </button>
+            } @else if (savedCc().length) {
+              <mat-icon>bookmarks</mat-icon><span>Pick saved addresses from the dropdown, or type a new one.</span>
+            } @else {
+              <mat-icon>info</mat-icon><span>Optionally save CC addresses to pick them from a dropdown next time.</span>
+            }
+          </div>
+        </div>
+      </section>
+
+      <aside class="pd-col side receiver-summary">
+        <div class="rs-total">
+          <span class="rs-num">{{ resolved().length }}</span>
+          <span class="rs-label">unique receivers</span>
+        </div>
+
+        @if (emails().length) {
+          <div class="rs-section">
+            <span class="rs-title">Email addresses · {{ emails().length }}</span>
+            <div class="chip-wrap scroll">
+              @for (e of emails(); track e) {
+                <span class="sel-chip email">{{ e }}
+                  <button type="button" (click)="removeEmail(e)" aria-label="Remove address"><mat-icon>close</mat-icon></button>
+                </span>
+              }
+            </div>
+          </div>
+        }
+        @if (cc().length) {
+          <div class="rs-section">
+            <span class="rs-title">CC · {{ cc().length }}</span>
+            <div class="chip-wrap scroll">
+              @for (e of cc(); track e) {
+                <span class="sel-chip email">{{ e }}
+                  <button type="button" (click)="removeCc(e)" aria-label="Remove CC address"><mat-icon>close</mat-icon></button>
+                </span>
+              }
+            </div>
+          </div>
+        }
+        <!-- Lists picked on plans made before the CC field; they can still be removed. -->
+        @if (groupIds().length) {
+          <div class="rs-section">
+            <span class="rs-title">Saved lists</span>
+            <div class="chip-wrap">
+              @for (id of groupIds(); track id) {
+                <span class="sel-chip group">{{ groupName(id) }} · {{ groupSize(id) }}
+                  <button type="button" (click)="removeGroup(id)" aria-label="Remove list"><mat-icon>close</mat-icon></button>
+                </span>
+              }
+            </div>
+          </div>
+        }
+        @if (!resolved().length) {
+          <div class="rs-empty">
+            <mat-icon>group_add</mat-icon>
+            <span>Paste or type receiver email addresses to build the receiver list.</span>
+          </div>
+        } @else {
+          <div class="rs-section">
+            <span class="rs-title">Will receive it</span>
+            <ul class="rs-preview">
+              @for (e of resolved().slice(0, 6); track e) { <li>{{ e }}</li> }
+              @if (resolved().length > 6) { <li class="muted">+ {{ resolved().length - 6 }} more</li> }
+            </ul>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+
+  <!-- ============ 4. REVIEW ============ -->
+  @if (step() === 3) {
+    <div class="pd-grid">
+      <section class="pd-col">
+        <div class="field-label">Mail schedule</div>
+        <ol class="review-timeline">
+          @for (e of entries(); track e.uid; let i = $index) {
+            <li class="rt-item">
+              <span class="rt-dot" aria-hidden="true"></span>
+              <div class="mail-preview">
+                <div class="mp-row">
+                  <span class="k">Day {{ dayNumber(i) }}</span>
+                  <span>{{ sendTime(e) | date: 'EEEE, MMM d · h:mm a' }}</span>
+                </div>
+                <div class="mp-row subject"><span class="k">Subject</span><strong>{{ e.subject }}</strong></div>
+                <app-rich-text-view class="mp-body" [html]="e.body" />
+              </div>
+            </li>
+          }
+        </ol>
+      </section>
+
+      <section class="pd-col side">
+        <div class="review-stats">
+          <div><span class="rv-num">{{ entries().length }}</span><span class="rv-lbl">mail days</span></div>
+          <div><span class="rv-num">{{ resolved().length }}</span><span class="rv-lbl">receivers</span></div>
+          <div><span class="rv-num">{{ totalSends() }}</span><span class="rv-lbl">deliveries</span></div>
+        </div>
+
+        <ul class="review-facts">
+          <li><mat-icon>{{ kindIcons[kind] }}</mat-icon>{{ kind }}</li>
+          <li><mat-icon>{{ channelIcons[channel] }}</mat-icon>Sent through {{ channel }}</li>
+          <li><mat-icon>{{ event ? 'event' : 'campaign' }}</mat-icon>{{ event || 'General mail' }}</li>
+          <li><mat-icon>group</mat-icon>{{ emails().length }} email{{ emails().length === 1 ? '' : 's' }}
+            @if (groupIds().length) { + {{ groupIds().length }} saved list{{ groupIds().length === 1 ? '' : 's' }} }
+          </li>
+          @if (cc().length) {
+            <li><mat-icon>forward_to_inbox</mat-icon>CC {{ cc().length }} address{{ cc().length === 1 ? '' : 'es' }}</li>
+          }
+          @if (lockedSends.length) {
+            <li><mat-icon>done_all</mat-icon>{{ lockedSends.length }} earlier day{{ lockedSends.length === 1 ? '' : 's' }} already sent</li>
+          }
+        </ul>
+      </section>
+    </div>
+  }
+</mat-dialog-content>
+
+<div class="pd-foot">
+  <span class="pd-summary">
+    <mat-icon>date_range</mat-icon>{{ entries().length }} day{{ entries().length === 1 ? '' : 's' }}
+    <span class="dot">·</span>
+    <mat-icon>group</mat-icon>{{ resolved().length }} receiver{{ resolved().length === 1 ? '' : 's' }}
+  </span>
+  @if (hasErrors(step())) {
+    <span class="pd-error" role="alert"><mat-icon>error_outline</mat-icon>{{ errors(step())[0] }}</span>
+  }
+  <span class="spacer"></span>
+  @if (step() > 0) { <button type="button" class="ev-btn" (click)="back()" [disabled]="saving()"><mat-icon>arrow_back</mat-icon> Back</button> }
+  @if (step() < 3) {
+    <button type="button" class="ev-btn solid" (click)="next()">Next <mat-icon>arrow_forward</mat-icon></button>
+  } @else {
+    <button type="button" class="ev-btn" (click)="save(true)" [disabled]="saving()"><mat-icon>save</mat-icon> Save draft</button>
+    <button type="button" class="ev-btn solid" (click)="save(false)" [disabled]="saving()">
+      <mat-icon>{{ saving() ? 'hourglass_empty' : 'schedule_send' }}</mat-icon>
+      {{ saving() ? 'Saving…' : data.plan ? 'Update plan' : 'Schedule plan' }}
+    </button>
+  }
+</div>
