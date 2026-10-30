@@ -1,5 +1,6 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,10 +9,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { finalize } from 'rxjs';
+import { MatSelectModule } from '@angular/material/select';
+import { finalize, interval } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { ContactDto, EventDto } from '../../core/models';
+import { ContactDto, EventDto, InvitationEmail, InvitationMessageRequest } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { ConfirmService } from '../../core/confirm.service';
 import { ALL_USERS, expandRecipients, invitationErrorMessage, recipientAddress } from '../../core/invitation.util';
 
 type RecipientField = 'to' | 'cc';
@@ -50,6 +53,7 @@ const PREVIEW_STYLES: Record<string, RegExp> = {
     MatIconModule,
     MatInputModule,
     MatTooltipModule,
+    MatSelectModule,
   ],
   templateUrl: './invitation-composer.html',
   styleUrl: './invitation-composer.scss',
@@ -62,9 +66,16 @@ export class InvitationComposerComponent implements OnChanges {
   @Output() sendingChange = new EventEmitter<boolean>();
   @ViewChild('editor', { static: true }) editor!: ElementRef<HTMLDivElement>;
   @ViewChild('previewBody', { static: true }) previewBody!: ElementRef<HTMLDivElement>;
+  @ViewChild('historyBody') set historyBody(element: ElementRef<HTMLDivElement> | undefined) {
+    if (!element) return;
+    const doc = new DOMParser().parseFromString(this.openedEmail()?.bodyHtml ?? '<div></div>', 'text/html');
+    element.nativeElement.replaceChildren(...Array.from(doc.body.childNodes, (n) => this.mirror(n, 0)));
+  }
 
   private api = inject(ApiService);
   private toast = inject(ToastService);
+  private confirmer = inject(ConfirmService);
+  private destroyRef = inject(DestroyRef);
 
   readonly allUsers = ALL_USERS;
   readonly fields: RecipientField[] = ['to', 'cc'];
@@ -78,9 +89,133 @@ export class InvitationComposerComponent implements OnChanges {
   private selection: Range | null = null;
   // Live preview of the email in the summary panel shows the message with its formatting.
   hasMessage = signal(false);
+  scheduleEnabled = false;
+  scheduleAt = '';
+  history = signal<InvitationEmail[]>([]);
+  historyLoading = signal(false);
+  historyError = signal('');
+  historyVisible = true;
+  historyFilter: 'All' | 'Scheduled' | 'Sent' = 'All';
+  openedEmail = signal<InvitationEmail | null>(null);
+  openingEmail = signal(false);
+  editingEmail: InvitationEmail | null = null;
+  private historyEventId: number | null = null;
+
+  constructor() {
+    interval(15000).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (this.historyVisible && this.event && !this.historyLoading()) this.loadHistory(false);
+    });
+  }
 
   ngOnChanges(): void {
     if (!this.subject && this.event) this.subject = `You're invited: ${this.event.title}`.slice(0, 200);
+    if (this.event && this.historyEventId !== this.event.id) {
+      if (this.historyEventId !== null) this.resetDraft();
+      this.historyEventId = this.event.id;
+      this.history.set([]);
+      this.openedEmail.set(null);
+      this.loadHistory();
+    }
+  }
+
+  get filteredHistory(): InvitationEmail[] {
+    return this.history().filter((m) => this.historyFilter === 'All' ||
+      (this.historyFilter === 'Sent' ? m.status === 'Sent' : ['Scheduled', 'Queued', 'Sending', 'Failed'].includes(m.status)));
+  }
+
+  canEdit(email: InvitationEmail): boolean {
+    return ['Scheduled', 'Queued', 'Failed'].includes(email.status);
+  }
+
+  loadHistory(showLoading = true): void {
+    const eventId = this.event.id;
+    if (showLoading) this.historyLoading.set(true);
+    this.api.invitationEmailHistory(eventId).pipe(takeUntilDestroyed(this.destroyRef),
+      finalize(() => { if (eventId === this.event.id) this.historyLoading.set(false); })).subscribe({
+      next: (items) => {
+        if (eventId !== this.event.id) return;
+        this.history.set(items);
+        this.historyError.set('');
+        const opened = this.openedEmail();
+        if (opened) {
+          const latest = items.find((m) => m.id === opened.id);
+          // If another admin edited the body, require reopening rather than mix
+          // old content with the new concurrency token.
+          if (latest && latest.version !== opened.version) this.openedEmail.set(null);
+        }
+      },
+      error: () => this.historyError.set('Email history could not be loaded. Refresh to try again.'),
+    });
+  }
+
+  toggleHistory(): void {
+    this.historyVisible = !this.historyVisible;
+    if (this.historyVisible) this.loadHistory();
+  }
+
+  openEmail(email: InvitationEmail): void {
+    if (this.openingEmail()) return;
+    this.openingEmail.set(true);
+    this.openedEmail.set(null);
+    const eventId = this.event.id;
+    this.api.invitationEmail(eventId, email.id).pipe(takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.openingEmail.set(false))).subscribe({
+      next: (message) => { if (eventId === this.event.id) this.openedEmail.set(message); },
+      error: () => this.toast.error('This email could not be opened. Refresh the history and try again.'),
+    });
+  }
+
+  async editEmail(email: InvitationEmail, copy = false): Promise<void> {
+    if (this.sending() || (!copy && !this.canEdit(email))) return;
+    if (this.recipients.to.length || this.recipients.cc.length || this.editor.nativeElement.textContent?.trim() ||
+        this.editor.nativeElement.querySelector('img') || this.scheduleEnabled || this.editingEmail ||
+        this.subject !== `You're invited: ${this.event.title}`.slice(0, 200)) {
+      if (!await this.confirmer.confirm({ title: 'Replace current draft?',
+        message: 'Unsaved changes in the composer will be lost.', confirmText: 'Replace draft', cancelText: 'Keep draft' })) return;
+    }
+    this.editingEmail = copy ? null : email;
+    this.recipients = { to: [...email.to], cc: [...email.cc] };
+    this.query = { to: '', cc: '' };
+    this.subject = email.subject;
+    this.scheduleEnabled = !copy && !!email.scheduledAt;
+    this.scheduleAt = email.scheduledAt ? new Date(new Date(email.scheduledAt).getTime() + 8 * 3600000).toISOString().slice(0, 16) : '';
+    // Rebuild nodes using the same allowlist as the preview. Never inject stored
+    // content directly into contenteditable, even though the API sanitizes it.
+    const doc = new DOMParser().parseFromString(email.bodyHtml ?? '<div></div>', 'text/html');
+    const content = doc.body.firstElementChild?.childNodes ?? doc.body.childNodes;
+    this.editor.nativeElement.replaceChildren(...Array.from(content, (n) => this.mirror(n, 0)));
+    this.selection = null;
+    this.syncPreview();
+    this.editor.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async cancelScheduled(email: InvitationEmail): Promise<void> {
+    if (this.sending()) return;
+    if (!await this.confirmer.confirm({ title: 'Cancel scheduled email?',
+      message: 'This email will remain in history and will no longer be sent.', confirmText: 'Cancel email', cancelText: 'Keep email' })) return;
+    this.setSending(true);
+    this.api.cancelInvitationEmail(this.event.id, email.id, email.version)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.setSending(false))).subscribe({
+        next: () => {
+          this.toast.success('Email cancelled.');
+          if (this.editingEmail?.id === email.id) this.resetDraft();
+          this.openedEmail.set(null);
+          this.loadHistory();
+        },
+        error: (error) => { this.toast.error(invitationErrorMessage(error)); this.loadHistory(); },
+      });
+  }
+
+  resetDraft(): void {
+    this.editingEmail = null;
+    this.recipients = { to: [], cc: [] };
+    this.query = { to: '', cc: '' };
+    this.subject = `You're invited: ${this.event.title}`.slice(0, 200);
+    this.scheduleEnabled = false;
+    this.scheduleAt = '';
+    this.editor.nativeElement.replaceChildren();
+    this.selection = null;
+    this.syncPreview();
   }
 
   // Unique addresses after @n-pax expansion; To wins over CC.
@@ -184,6 +319,10 @@ export class InvitationComposerComponent implements OnChanges {
       return fragment;
     }
     const el = document.createElement(tag);
+    if (tag === 'a') {
+      const href = node.getAttribute('href') ?? '';
+      if (/^(https?:\/\/|mailto:)/i.test(href)) el.setAttribute('href', href);
+    }
     for (const [prop, ok] of Object.entries(PREVIEW_STYLES)) {
       const value = node.style.getPropertyValue(prop).trim().toLowerCase();
       if (value && ok.test(value)) el.style.setProperty(prop, value);
@@ -350,25 +489,33 @@ export class InvitationComposerComponent implements OnChanges {
       this.toast.error('Enter a subject up to 200 characters.');
       return;
     }
+    let scheduledAt: string | null = null;
+    if (this.scheduleEnabled) {
+      const date = new Date(this.scheduleAt + '+08:00');
+      if (!this.scheduleAt || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+        this.toast.error('Choose a future date and time in Philippine time (UTC+8).');
+        return;
+      }
+      scheduledAt = date.toISOString();
+    }
     // XHTML: the server parses it without DTDs and rebuilds an allowlist of safe formatting.
     const bodyHtml = new XMLSerializer().serializeToString(this.editor.nativeElement);
+    const request: InvitationMessageRequest = {
+      to: [...this.recipients.to], cc: [...this.recipients.cc], subject: this.subject.trim(), bodyHtml, scheduledAt,
+    };
+    const operation = this.editingEmail
+      ? this.api.updateInvitationEmail(this.event.id, this.editingEmail.id, { ...request, version: this.editingEmail.version })
+      : this.api.sendInvitationMessage(this.event.id, request);
     this.setSending(true);
-    this.api
-      .sendInvitationMessage(this.event.id, {
-        to: [...this.recipients.to],
-        cc: [...this.recipients.cc],
-        subject: this.subject.trim(),
-        bodyHtml,
-      })
-      .pipe(finalize(() => this.setSending(false)))
+    operation
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.setSending(false)))
       .subscribe({
         next: (result) => {
-          if (result.queued) this.toast.warning(result.message, 8000);
+          if (result.queued || result.status === 'Failed') this.toast.warning(result.message, 8000);
           else this.toast.success(result.message);
-          this.recipients = { to: [], cc: [] };
-          this.editor.nativeElement.replaceChildren();
-          this.selection = null;
-          this.syncPreview();
+          this.resetDraft();
+          this.openedEmail.set(null);
+          this.loadHistory();
           this.sent.emit();
         },
         // The draft is kept so it can be retried.

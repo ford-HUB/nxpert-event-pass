@@ -175,7 +175,12 @@ public record SessionDto(
 public record InviteRequest(List<string> Emails);
 // Composed invitation: To / CC (addresses or "@n-pax" for every system user), subject and
 // editor XHTML. The server rebuilds a safe HTML allowlist and turns images into CID parts.
-public record InvitationComposeRequest(List<string>? To, List<string>? Cc, string? Subject, string? BodyHtml);
+public record InvitationComposeRequest(List<string>? To, List<string>? Cc, string? Subject, string? BodyHtml,
+    DateTimeOffset? ScheduledAt = null);
+
+public record InvitationEmailUpdateRequest(List<string>? To, List<string>? Cc, string? Subject,
+    string? BodyHtml, DateTimeOffset? ScheduledAt, string Version);
+public record InvitationEmailVersionRequest(string Version);
 
 // SessionIds: which sub-events to register for (empty/null = the whole event, for events
 // that have no sub-events).

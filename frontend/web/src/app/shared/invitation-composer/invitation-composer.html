@@ -2,7 +2,7 @@
   <div class="invite-main">
     <div class="section-head">
       <div>
-        <h3>Compose invitation</h3>
+        <h3>{{ editingEmail ? 'Edit scheduled email' : 'Compose invitation' }}</h3>
         <p class="muted">
           Pick system users or type email addresses. Use <strong>&#64;n-pax</strong> to include all
           {{ directoryCount }} system users.
@@ -21,7 +21,7 @@
             @for (address of recipients[field]; track address) {
               <mat-chip-row (removed)="remove(field, address)" [disabled]="sending()"
                             [class.group-chip]="address === allUsers"
-                            [matTooltip]="address === allUsers ? 'Expands to all current system users when sent' : address">
+                            [matTooltip]="address === allUsers ? 'Expands to all current system users when saved' : address">
                 {{ label(address) }}
                 <button matChipRemove [attr.aria-label]="'Remove ' + address"><mat-icon>cancel</mat-icon></button>
               </mat-chip-row>
@@ -49,6 +49,20 @@
         <mat-label>Subject</mat-label>
         <input matInput [(ngModel)]="subject" name="subject" maxlength="200" [disabled]="sending()" />
       </mat-form-field>
+
+      <div class="schedule-controls">
+        <label class="schedule-toggle">
+          <input type="checkbox" [(ngModel)]="scheduleEnabled" [disabled]="sending()" />
+          Schedule for later
+        </label>
+        @if (scheduleEnabled) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Send date and time (Philippine time)</mat-label>
+            <input matInput type="datetime-local" [(ngModel)]="scheduleAt" [disabled]="sending()" required />
+          </mat-form-field>
+          <p class="hint">Philippine time (UTC+8). The server sends automatically, even when this page is closed.</p>
+        }
+      </div>
 
       <div class="message-box">
         <div class="format-toolbar" role="toolbar" aria-label="Message formatting" (mousedown)="$event.preventDefault()">
@@ -112,7 +126,7 @@
 
         <div class="mail-body">
           <!-- Filled by syncPreview() with an allowlisted copy of the editor content. -->
-          <div #previewBody class="mail-message" [hidden]="!hasMessage()"></div>
+          <div #previewBody class="mail-message" [hidden]="!hasMessage()" (click)="$event.preventDefault()"></div>
           @if (!hasMessage()) {
             <p class="mail-empty">Your message appears here.</p>
           }
@@ -149,7 +163,93 @@
     </div>
 
     <button mat-flat-button color="primary" class="full-width" (click)="send()" [disabled]="sending() || processingImage()">
-      <mat-icon>send</mat-icon> Send invitations
+      <mat-icon>{{ scheduleEnabled ? 'schedule_send' : 'send' }}</mat-icon>
+      {{ editingEmail ? (scheduleEnabled ? 'Save schedule changes' : 'Save and send now') : (scheduleEnabled ? 'Schedule invitations' : 'Send invitations') }}
     </button>
+    @if (editingEmail) {
+      <button mat-stroked-button class="full-width" (click)="resetDraft()" [disabled]="sending()">Discard edits</button>
+      <p class="hint">The saved email keeps its current schedule until you save changes.</p>
+    }
   </aside>
 </div>
+
+<section class="email-history" aria-label="Email history">
+  <div class="history-toolbar">
+    <div>
+      <h3>Email history</h3>
+      <p class="muted">Scheduled and sent invitations for this event. All dates are in Philippine time (UTC+8).</p>
+    </div>
+    <button mat-stroked-button (click)="toggleHistory()" [attr.aria-expanded]="historyVisible">
+      <mat-icon>{{ historyVisible ? 'visibility_off' : 'visibility' }}</mat-icon>
+      {{ historyVisible ? 'Hide emails' : 'Show emails' }}
+    </button>
+  </div>
+  @if (historyVisible) {
+    <div class="history-toolbar">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Show emails</mat-label>
+        <mat-select [(ngModel)]="historyFilter">
+          <mat-option value="All">All emails</mat-option>
+          <mat-option value="Scheduled">Scheduled</mat-option>
+          <mat-option value="Sent">Sent</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-button (click)="loadHistory()" [disabled]="historyLoading()"><mat-icon>refresh</mat-icon>Refresh</button>
+    </div>
+    @if (historyError()) { <p role="alert" class="history-error">{{ historyError() }}</p> }
+    @if (historyLoading()) { <p class="hint" role="status">Loading email history…</p> }
+    @if (historyFilter === 'Scheduled') {
+      <p class="hint">Includes scheduled, sending, queued and failed emails that have not been sent.</p>
+    }
+    @if (!historyLoading() && !historyError() && !filteredHistory.length) {
+      <p class="history-empty">No {{ historyFilter === 'All' ? '' : historyFilter.toLowerCase() + ' ' }}emails yet.</p>
+    }
+    <div class="history-list">
+      @for (email of filteredHistory; track email.id) {
+        <article class="history-row">
+          <div class="history-content">
+            <button type="button" class="history-subject" (click)="openEmail(email)" [disabled]="openingEmail() || sending()">{{ email.subject }}</button>
+            <p class="history-recipients">To: {{ email.to.join(', ') }}@if (email.cc.length) { · CC: {{ email.cc.join(', ') }} }</p>
+            <p class="hint">
+              Created {{ email.createdAt | date: 'MMM d, y, h:mm a' : '+0800' }}
+              @if (email.scheduledAt) { · Scheduled {{ email.scheduledAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
+              @if (email.sentAt) { · Sent {{ email.sentAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
+              @if (email.status === 'Queued') { · Next attempt {{ email.nextAttemptAt | date: 'MMM d, y, h:mm a' : '+0800' }} }
+            </p>
+            @if (email.lastError) { <p class="history-error">{{ email.lastError }}</p> }
+          </div>
+          <div class="history-actions">
+            <span class="email-status" [class.email-sent]="email.status === 'Sent'" [class.email-failed]="email.status === 'Failed' || email.status === 'Queued'">{{ email.status }}</span>
+            <button mat-button (click)="openEmail(email)" [disabled]="openingEmail() || sending()">Open{{ canEdit(email) ? ' / edit' : '' }}</button>
+          </div>
+        </article>
+      }
+    </div>
+    @if (openingEmail()) { <p role="status">Opening email…</p> }
+    @if (openedEmail(); as email) {
+      <article class="history-detail">
+        <div class="history-toolbar">
+          <h3>{{ email.subject }}</h3>
+          <button mat-icon-button aria-label="Close email" (click)="openedEmail.set(null)"><mat-icon>close</mat-icon></button>
+        </div>
+        <p><strong>Status:</strong> {{ email.status }}</p>
+        <p class="history-recipients"><strong>To:</strong> {{ email.to.join(', ') }}</p>
+        @if (email.cc.length) { <p class="history-recipients"><strong>CC:</strong> {{ email.cc.join(', ') }}</p> }
+        <p class="hint">Created {{ email.createdAt | date: 'MMM d, y, h:mm a' : '+0800' }} · Updated {{ email.updatedAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p>
+        @if (email.scheduledAt) { <p><strong>Scheduled:</strong> {{ email.scheduledAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p> }
+        @if (email.sentAt) { <p><strong>Sent:</strong> {{ email.sentAt | date: 'MMM d, y, h:mm a' : '+0800' }} (UTC+8)</p> }
+        @if (email.lastError) { <p class="history-error">{{ email.lastError }}</p> }
+        <div #historyBody class="history-body" (click)="$event.preventDefault()"></div>
+        <p class="hint">The event information and calendar invitation are appended when this email is sent.</p>
+        <div class="history-detail-actions">
+          @if (canEdit(email)) {
+            <button mat-flat-button (click)="editEmail(email)" [disabled]="sending()"><mat-icon>edit</mat-icon>Edit email / schedule</button>
+            <button mat-stroked-button (click)="cancelScheduled(email)" [disabled]="sending()">Cancel email</button>
+          } @else {
+            <button mat-stroked-button (click)="editEmail(email, true)" [disabled]="sending()">Use as new draft</button>
+          }
+        </div>
+      </article>
+    }
+  }
+</section>

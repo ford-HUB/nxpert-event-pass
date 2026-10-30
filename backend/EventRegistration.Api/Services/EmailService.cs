@@ -123,7 +123,7 @@ public class EmailService
         return msg;
     }
 
-    public async Task<EmailDeliveryStatus> SendMessageAsync(IReadOnlyCollection<string> to,
+    public virtual async Task<EmailDeliveryStatus> SendMessageAsync(IReadOnlyCollection<string> to,
         IReadOnlyCollection<string> cc, string subject, string htmlBody,
         byte[]? inlineQrPng = null, string cid = "qrcode",
         IReadOnlyDictionary<string, byte[]>? inlineImages = null,
@@ -137,7 +137,7 @@ public class EmailService
         {
             try
             {
-                using var client = new SmtpClient();
+                using var client = new SmtpClient { Timeout = 60_000 };
                 await client.ConnectAsync(_s.Host, _s.Port, SecureSocketOptions.StartTls);
                 await client.AuthenticateAsync(_s.User, _s.Password);
                 await client.SendAsync(msg);
